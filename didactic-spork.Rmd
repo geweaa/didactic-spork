@@ -1,5 +1,5 @@
 ---
-title: "didactic-spork (P26201)"
+title: "didactic-spork (P26201 - cultures)"
 author: "George"
 date: '2022-07-12'
 output:
@@ -24,18 +24,18 @@ library(tidyverse)
 
 
 ```{r themes}
-theme_barplot <- function() {
+theme_barplot <- function(fontsize = 6) {
   theme(
-    axis.title.x = element_text(colour = "black", size = 8),
-    axis.title.y = element_text(colour = "black", size = 8),
-    axis.text.x = element_text(colour = "black", size = 8),
-    axis.text.y = element_text(colour = "black", size = 8, margin = margin(0,-5,0,0, unit = 'mm')),
-    legend.text = element_text(colour = "black", size = 8),
+    axis.title.x = element_text(colour = "black", size = fontsize),
+    axis.title.y = element_text(colour = "black", size = fontsize),
+    axis.text.x = element_text(colour = "black", size = fontsize),
+    axis.text.y = element_text(colour = "black", size = fontsize, margin = margin(0,-5,0,0, unit = 'mm')),
+    legend.text = element_text(colour = "black", size = fontsize),
     strip.background = element_blank(),
     panel.grid = element_blank(),
     legend.position = "bottom",
     aspect.ratio = 0.7,
-    strip.text = element_text(colour = "black", size = 8, hjust = 0.5),
+    strip.text = element_text(colour = "black", size = font, hjust = 0.5),
     panel.background = element_blank(),
     legend.title = element_blank(),
     legend.box.background = element_blank(),
@@ -45,6 +45,28 @@ theme_barplot <- function() {
     legend.key.size = unit(4.5, "mm"),
     legend.box.spacing = unit(1, 'mm'),
     axis.ticks.y = element_blank()
+  )
+}
+
+theme_tidy <- function(fontsize = 6) {
+  theme(
+    axis.title.x = element_text(colour = "black", size = fontsize),
+    axis.title.y = element_text(colour = "black", size = fontsize),
+    axis.text.x = element_text(colour = "black", size = fontsize),
+    axis.text.y = element_text(colour = "black", size = fontsize),
+    legend.text = element_text(colour = "black", size = fontsize),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text = element_text(colour = "black", size = font, hjust = 0.5),
+    panel.grid = element_blank(),
+    legend.position = "bottom",
+    aspect.ratio = 1.0,
+    plot.background = element_rect(fill = "white"),
+    panel.background = element_blank(),
+    panel.border = element_rect(colour = "black", size = 0.5, fill = NA),
+    legend.title = element_blank(),
+    legend.box.background = element_blank(),
+    legend.key = element_blank()
   )
 }
 ```
@@ -62,7 +84,11 @@ tax <- read_tsv("ASV_tax_species.tsv", col_types = cols(.default = col_character
   rename(seqid = ASV_ID) %>%
   mutate(Phylum = gsub("Firmicutes_.", "Firmicutes", Phylum))
 
-smd <- read_tsv("P26201_smd.tsv", col_types = cols(.default = col_character(), Kreads = col_double()))
+smd <- read_tsv("P26201_smd.tsv", 
+                col_types = cols(.default = col_character(), Kreads = col_double())) %>%
+  mutate(age = as.Date(age, format = "%d-%m-%Y")) %>%
+  mutate(age = format(age, "%m/%Y")) %>%
+  mutate(id = paste(medium, " ", age, " (", gsub("P26201_10","",sample), ")", sep = ""))
 ```
 
 
@@ -74,8 +100,58 @@ seqtab %>%
 ```
 
 
-```{r barplot cultures}
+```{r rarefaction}
 seqtab %>%
+  inner_join(smd, by = "sample") %>% filter(groundwater == "KR0015B") %>%
+  select(sample, seqid, count) %>%
+  spread(seqid, count, fill = 0) %>%
+  column_to_rownames('sample') -> seqtab_matrix
+  
+png(filename = "figures/rarecurve_meteoric.png", width = 14, height = 10, units = "cm", res = 300)  
+min(rowSums(seqtab_matrix)) %>%
+vegan::rarecurve(seqtab_matrix, 
+                 sample = ., step = 100, cex = 0.5, cex.axis = 0.6, cex.lab = 0.6, 
+                 xlab = 'Sequencing depth KR0015B', 
+                 ylab = 'Rarefied No. of ASVs', label = TRUE)
+dev.off()
+
+
+seqtab %>%
+  inner_join(smd, by = "sample") %>% filter(groundwater == "SA1420A-1") %>%
+  select(sample, seqid, count) %>%
+  spread(seqid, count, fill = 0) %>%
+  column_to_rownames('sample') -> seqtab_matrix
+  
+png(filename = "figures/rarecurve_mm.png", width = 14, height = 10, units = "cm", res = 300)  
+min(rowSums(seqtab_matrix)) %>%
+vegan::rarecurve(seqtab_matrix, 
+                 sample = ., step = 100, cex = 0.5, cex.axis = 0.6, cex.lab = 0.6, 
+                 xlab = 'Sequencing depth SA1420A-1', 
+                 ylab = 'Rarefied No. of ASVs', label = TRUE)
+dev.off()
+
+
+
+seqtab %>%
+  inner_join(smd, by = "sample") %>% 
+  filter(groundwater %in% c("KA3511A-1","SA2600A-1","KA2862A-1")) %>%
+  select(sample, seqid, count) %>%
+  spread(seqid, count, fill = 0) %>%
+  column_to_rownames('sample') -> seqtab_matrix
+  
+png(filename = "figures/rarecurve_os.png", width = 14, height = 10, units = "cm", res = 300)  
+min(rowSums(seqtab_matrix)) %>%
+vegan::rarecurve(seqtab_matrix, 
+                 sample = ., step = 100, cex = 0.5, cex.axis = 0.6, cex.lab = 0.6, 
+                 xlab = 'Sequencing depth SA2600, KA3511 & KA2862', 
+                 ylab = 'Rarefied No. of ASVs', label = TRUE)
+dev.off()
+```
+
+
+```{r barplot phylum}
+seqtab %>%
+  inner_join(smd, by = "sample") %>% filter(groundwater == "SA1420A-1") %>%
   inner_join(tax, by = "seqid") %>%
   group_by(Phylum, sample) %>%
   # Sum the abundance of each phylum within a sample
@@ -87,16 +163,18 @@ seqtab %>%
 
 tax %>%
   left_join(t %>% transmute(Phylum, topphylum = Phylum), by = "Phylum") %>%
-  replace_na(list("topphylum" = "Other")) -> taxref
+  replace_na(list("topphylum" = "Other")) %>%
+  mutate(rank = coalesce(Genus, Family, Order, Class))-> taxref
 
 seqtab %>%
   inner_join(taxref, by = "seqid") %>% 
   inner_join(smd, by = 'sample') %>%
+  filter(groundwater == "SA1420A-1") %>%
   # Summarize in order to have the sum for each category and topphylum
-  group_by(topphylum, sample) %>% 
+  group_by(topphylum, id) %>% 
   summarise(relab = sum(relab), .groups = 'drop') %>%
   # Call the plot
-  ggplot(aes(x = fct_rev(sample), y = relab, fill = fct_relevel(topphylum, c("Other")))) +
+  ggplot(aes(x = fct_rev(id), y = relab, fill = fct_relevel(topphylum, c("Other")))) +
   labs(x = '', y = 'Relative abundance') +
   geom_col() +
   scale_fill_brewer(palette = 'Paired') +
@@ -104,3 +182,289 @@ seqtab %>%
   scale_y_continuous(trans = 'reverse', labels = c('1.0','0.75','0.50','0.25','0')) +
   theme_barplot() + theme(aspect.ratio = 1.0)
 ```
+
+
+```{r export barplot phylum}
+ggsave("barplot_phylum.png", width = 12, height = 16, units = "cm")
+```
+
+
+```{r lollipop mm}
+seqtab %>%
+  inner_join(smd, by = "sample") %>%
+  filter(groundwater == "SA1420A-1") %>%
+  inner_join(taxref, by = "seqid") %>%
+  group_by(sample, rank) %>% summarise(relab = sum(relab), .groups = "drop_last") %>%
+  slice_max(order_by = relab, n = 1) %>% ungroup() %>%
+  mutate(relab = round(relab, digits = 2) * 100) %>%
+  mutate(i = paste(rank, " (", relab, "%)", sep = "")) %>%
+  mutate(hjust = if_else(relab >= 50, 1.05, -0.07)) -> plotlab
+  
+plotlab %>%
+  inner_join(smd, by = "sample") %>%
+  arrange(desc(relab)) %>%
+  ggplot(aes(x = fct_reorder(id, relab), y = relab)) +
+  geom_segment(aes(xend = id, y = 0, yend = relab), color = "grey", size = 0.1) +
+  geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
+  geom_text(aes(label = i, hjust = hjust), 
+            color = "black", size = 2) +
+  scale_y_continuous(limits = c(0, 100)) +
+  coord_flip() +
+  labs(x = "", y = "Relative abundance (%)") +
+  theme(panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        aspect.ratio = 1.6,
+        axis.text.x = element_text(size = 7, color = "black"),
+        axis.text.y = element_text(size = 7, color = "black"),
+        strip.text = element_text(size = 7, color = "black"),
+        axis.title.x.bottom = element_text(size = 7, color = "black"),
+        strip.background = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.border = element_blank(),
+        axis.line.x.bottom = element_line(),
+        axis.ticks.y = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey"))
+```
+
+
+```{r export lollipop mm}
+ggsave(filename = "lollipop.png", width = 14, height = 12, units = c("cm"))
+```
+
+
+#### Alpha diversity ####
+
+
+```{r alpha diversity}
+seqtab %>%
+  select(-relab) %>%
+  spread(seqid, count, fill = 0) %>% 
+  column_to_rownames('sample') %>%
+  vegan::diversity() %>% as.data.frame() %>%
+  rownames_to_column('sample') %>%
+  rename(shannon = 2) %>%
+  inner_join(smd, by = "sample") -> adiv
+```
+
+
+```{r plot alpha diversity}
+specno %>%
+  mutate(groundwater = gsub("A-1", "", groundwater)) %>%
+  ggplot(aes(x = specno, y = fct_relevel(groundwater, 
+                                          c("SA2600","KA3511","KA2862","KA2511","SA1420","SA1229","KR0015B")
+                                          ))) + 
+  geom_boxplot(outlier.color = "white") +
+  geom_point(aes(color = fraction), stroke = 0.8, size = 2, fill = "white", shape = 21) +
+  labs(x = "Alpha diversity (Estimated No. ASVs)", y = "") +
+  theme_tidy() +
+  scale_color_manual(name = "Size fraction inoculum", labels = c("> 0.1 µm","0.1 - 0.45 µm"), values = c(unfiltered = "black", filtered = "#e31a1c")) +
+  theme(legend.title = element_text(size = 6, face = "bold"),
+        legend.position = c(0.75, 0.2),
+        legend.box.background = element_rect(color = 'black', size = 0.5),
+        axis.text.x = element_text(face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        plot.background = element_rect(fill = "white"),
+        panel.border = element_blank(),
+        axis.line.x.bottom = element_line(),
+        axis.line.y.left = element_line(),
+        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4))
+```
+```{r export alphadiv}
+ggsave(filename = "figures/adiv.png", width = 8, height = 8, units = c("cm"))
+```
+
+
+```{r specnumber}
+seqtab %>%
+  select(-relab) %>%
+  spread(seqid, count, fill = 0) %>% 
+  column_to_rownames('sample') %>%
+  vegan::specnumber() %>% as.data.frame() %>%
+  rownames_to_column('sample') %>%
+  rename(specno = 2) %>%
+  inner_join(smd, by = "sample") %>% tibble() -> specno
+```
+
+
+```{r plot specnumber}
+specno %>%
+  mutate(groundwater = gsub("A-1", "", groundwater)) %>%
+  filter(fraction != "filtered") %>%
+  mutate(sample = paste(groundwater, medium)) %>%
+  ggplot(aes(x = fct_reorder(sample, specno), y = specno)) + 
+  geom_segment(aes(xend = sample, y = 0, yend = specno), color = "black", size = 0.3) +
+  geom_point(stroke = 0.8, size = 2, fill = "white", shape = 21) +
+  labs(x = "", y = "Estimated species number") +
+  coord_flip() +
+  theme_tidy() +
+  scale_y_continuous(expand = c(0,2), limits = c(0,1500)) +
+  theme(aspect.ratio = 1.2,
+        axis.ticks.length = unit(-0.12, "cm"),
+        panel.border = element_blank(),
+        axis.line.x.bottom = element_line(),
+        axis.ticks.y = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4))
+```
+
+
+```{r export lollipop meteoric}
+ggsave(filename = "lollipop_specnumber.png", width = 14, height = 12, units = c("cm"))
+```
+
+
+#### Cultures of special interest ####
+
+
+```{r lollipop interest}
+i <- c(
+"srm 10/2021 (07)","lys 10/2021 (09)","srm 10/2021 (10)","srm 10/2021 (26)","srm 10/2021 (27)",
+"ace 10/2021 (32)","srm 10/2021 (33)","srm 10/2021 (34)","lys 02/2021 (37)","lys 02/2021 (38)",
+"met 10/2021 (44)","met 10/2021 (45)","lys 10/2021 (54)","lys 10/2021 (55)","srm 10/2021 (56)",
+"srm 10/2021 (57)","srm 03/2022 (61)","srm 03/2022 (62)","srm 03/2022 (63)","lys 03/2022 (68)",
+"lys 03/2022 (69)","srm 03/2022 (70)","srm 03/2022 (71)","srm 03/2022 (72)","lys 03/2022 (73)",
+"lys 03/2022 (74)","lys 03/2022 (75)","srm 03/2022 (77)","srm 03/2022 (78)","lys 03/2022 (79)",
+"lys 03/2022 (80)","lys 03/2022 (81)"
+)
+
+seqtab %>%
+  inner_join(smd, by = "sample") %>%
+  filter(id %in% i) %>%
+  inner_join(taxref, by = "seqid") %>%
+  group_by(sample, rank) %>% summarise(relab = sum(relab), .groups = "drop_last") %>%
+  slice_max(order_by = relab, n = 1) %>% ungroup() %>%
+  mutate(relab = round(relab, digits = 3) * 100) %>%
+  mutate(i = paste(rank, " (", relab, "%)", sep = "")) %>%
+  mutate(hjust = if_else(relab >= 70, 1.05, -0.07)) -> plotlab
+  
+plotlab %>%
+  inner_join(smd, by = "sample") %>%
+  ggplot(aes(x = fct_reorder(id, relab), y = relab)) +
+  geom_segment(aes(xend = id, y = 30, yend = relab), color = "black", size = 0.1) +
+  geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
+  geom_label(aes(label = i, hjust = hjust), 
+            color = "black", fontface = "bold", size = 1.6, label.size = 0.1, label.padding = unit(0.10, "lines")) +
+  coord_flip() +
+  scale_y_continuous(expand = c(0.004,0), limits = c(30,100)) +
+  labs(x = "Enrichtment culture", y = "Relative abundance (%)") +
+  theme_tidy() +
+  theme(aspect.ratio = 2,
+        plot.margin = margin(4,8,4,0),
+        axis.text.x.bottom = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.ticks.length = unit(0.12, "cm"),
+        panel.border = element_blank(),
+        axis.line.x.bottom = element_line(),
+        axis.ticks.y = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4)) -> p1
+```
+
+
+```{r barplot interest order}
+seqtab %>%
+  inner_join(smd, by = "sample") %>%
+  filter(id %in% i) %>%
+  inner_join(tax, by = "seqid") %>%
+  group_by(Order, sample) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  filter(!is.na(Order)) %>%
+  top_n(11, mean_relab) -> t
+
+tax %>%
+  left_join(t %>% transmute(Order, topphylum = Order), by = "Order") %>%
+  replace_na(list("topphylum" = "Other")) %>%
+  mutate(rank = coalesce(Genus, Family, Order, Class))-> taxref
+
+plotlab %>% inner_join(smd, by = "sample") %>% arrange(desc(relab)) %>% pull(id) -> ids
+
+seqtab %>%
+  inner_join(taxref, by = "seqid") %>% 
+  inner_join(smd, by = 'sample') %>%
+  filter(id %in% i) %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(topphylum, id) %>% 
+  summarise(relab = sum(relab) * 100, .groups = 'drop') %>%
+  # Call the plot
+  ggplot(aes(x = fct_relevel(id, ids) %>% fct_rev(), 
+             y = relab, 
+             fill = fct_relevel(topphylum, c("Other")))) +
+  labs(x = '', y = 'Relative abundance (%)') +
+  geom_col() +
+  scale_fill_brewer(palette = 'Paired') +
+  coord_flip() + 
+  scale_y_continuous(trans = 'reverse', labels = c('100','','50','','0'), expand = c(0.004,0)) +
+  theme_barplot() + 
+  theme(aspect.ratio = 3, 
+        axis.text.y = element_blank(),
+        axis.line.x.bottom = element_line(),
+        plot.margin = margin(4,4,4,0),
+        axis.text.x = element_text(face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        legend.position = "right",
+        legend.text = element_text(size = 6, color = "black"),
+        legend.key.size = unit(3, "mm")) -> p2
+```
+
+
+```{r patch interest}
+library(patchwork)
+
+p1 + p2
+```
+
+
+```{r export cowplot interest}
+ggsave(filename = "figures/interest.png", width = 14, height = 10, units = c("cm"))
+```
+
+
+```{r age scatterplot}
+specno %>%
+  filter(fraction != "filtered") %>%
+  ggplot(aes(x = age, y = specno)) +
+  geom_point()
+```
+
+
+```{r}
+mypalette <- c("Acholeplasmatales" = "#1f78b4", "Bacteroidales" = "#b2df8a", "Burkholderiales" = "#33a02c", "Campylobacterales" = "#a6cee3",
+  "Desulfobulbales" = "#fb9a99", "Desulfovibrionales" = "#e31a1c", "Enterobacterales" = "#fdbf6f", "Eubacteriales" = "#ff7f00",
+  "Holophagales" = "#cab2d6", "Izemoplasmatales" = "#6a3d9a", "Rhodospirillales" = "#ffff99", "Sphaerochaetales" = "#b15928")
+
+seqtab %>%
+  inner_join(smd, by = "sample") %>%
+  filter(id %in% i) %>%
+  inner_join(taxref, by = "seqid") %>%
+  group_by(sample, rank) %>% summarise(relab = sum(relab), order = first(Order), .groups = "drop_last") %>%
+  slice_max(order_by = relab, n = 1) %>% ungroup() %>%
+  mutate(relab = round(relab, digits = 3) * 100) %>%
+  mutate(i = paste(rank, " (", relab, "%)", sep = "")) %>%
+  mutate(hjust = if_else(relab >= 70, 1.05, -0.07)) -> plotlab
+
+plotlab %>%
+  select(-i) %>%
+  inner_join(smd, by = 'sample') %>%
+  filter(id %in% i) %>%
+  ggplot(aes(x = fct_relevel(id, ids) %>% fct_rev(),
+             y = NA, color = order)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = mypalette) +
+  coord_flip() +
+  theme_void() +
+  theme(aspect.ratio = 2,
+        plot.margin = margin(4,0,4,0),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 6, colour = "black"),
+        legend.box.margin = margin(0,0,0,0)) -> p3
+ 
+p1 + p3
+```
+
+
+
+
