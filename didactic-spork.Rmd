@@ -24,71 +24,17 @@ library(tidyverse)
 
 
 ```{r themes}
-theme_barplot <- function(fontsize = 6) {
-  theme(
-    axis.title.x = element_text(colour = "black", size = fontsize),
-    axis.title.y = element_text(colour = "black", size = fontsize),
-    axis.text.x = element_text(colour = "black", size = fontsize),
-    axis.text.y = element_text(colour = "black", size = fontsize, margin = margin(0,-5,0,0, unit = 'mm')),
-    legend.text = element_text(colour = "black", size = fontsize),
-    strip.background = element_blank(),
-    panel.grid = element_blank(),
-    legend.position = "bottom",
-    aspect.ratio = 0.7,
-    strip.text = element_text(colour = "black", size = font, hjust = 0.5),
-    panel.background = element_blank(),
-    legend.title = element_blank(),
-    legend.box.background = element_blank(),
-    legend.key = element_blank(),
-    legend.spacing.x = unit(0.5, 'mm'),
-    panel.border = element_blank(),
-    legend.key.size = unit(4.5, "mm"),
-    legend.box.spacing = unit(1, 'mm'),
-    axis.ticks.y = element_blank()
-  )
-}
-
-theme_tidy <- function(fontsize = 6) {
-  theme(
-    axis.title.x = element_text(colour = "black", size = fontsize),
-    axis.title.y = element_text(colour = "black", size = fontsize),
-    axis.text.x = element_text(colour = "black", size = fontsize),
-    axis.text.y = element_text(colour = "black", size = fontsize),
-    legend.text = element_text(colour = "black", size = fontsize),
-    strip.background = element_blank(),
-    strip.placement = "outside",
-    strip.text = element_text(colour = "black", size = font, hjust = 0.5),
-    panel.grid = element_blank(),
-    legend.position = "bottom",
-    aspect.ratio = 1.0,
-    plot.background = element_rect(fill = "white"),
-    panel.background = element_blank(),
-    panel.border = element_rect(colour = "black", size = 0.5, fill = NA),
-    legend.title = element_blank(),
-    legend.box.background = element_blank(),
-    legend.key = element_blank()
-  )
-}
+source("/Users/geweaa/Box Sync/Protocols/theme.R")
+source("/Users/geweaa/Box Sync/Protocols/barplot.R")
 ```
 
 
 ```{r files}
-seqtab <- read_tsv("ASV_table.tsv", col_types = cols(.default = col_integer(), ASV_ID = col_character())) %>%
-  pivot_longer(cols = -1, names_to = "sample", values_to = "count") %>% # Long format
-  rename(seqid = ASV_ID) %>%
-  filter(count > 0) %>%
-  mutate(sample = gsub("_S.*", "", sample)) %>%
+seqtab <- read_tsv("ASV_table.tsv", col_types = cols(.default = col_character(), count = col_integer())) %>%
   group_by(sample) %>% mutate(relab = count/sum(count)) %>% ungroup() # Add relative abundance
   
-tax <- read_tsv("ASV_tax_species.tsv", col_types = cols(.default = col_character())) %>%
-  rename(seqid = ASV_ID) %>%
-  mutate(Phylum = gsub("Firmicutes_.", "Firmicutes", Phylum))
-
-smd <- read_tsv("P26201_smd.tsv", 
-                col_types = cols(.default = col_character(), Kreads = col_double())) %>%
-  mutate(age = as.Date(age, format = "%d-%m-%Y")) %>%
-  mutate(age = format(age, "%m/%Y")) %>%
-  mutate(id = paste(medium, " ", age, " (", gsub("P26201_10","",sample), ")", sep = ""))
+tax <- read_tsv("tax.P21015.P26201.tsv", col_types = cols(.default = col_character()))
+smd <- read_tsv("smd.P21015.P26201.tsv", col_types = cols(.default = col_character())) 
 ```
 
 
@@ -148,45 +94,6 @@ vegan::rarecurve(seqtab_matrix,
 dev.off()
 ```
 
-
-```{r barplot phylum}
-seqtab %>%
-  inner_join(smd, by = "sample") %>% filter(groundwater == "SA1420A-1") %>%
-  inner_join(tax, by = "seqid") %>%
-  group_by(Phylum, sample) %>%
-  # Sum the abundance of each phylum within a sample
-  summarise(relab = sum(relab), .groups = 'drop_last') %>%
-  # Calculate the mean abundance of each phylum over the categories
-  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
-  filter(!is.na(Phylum)) %>%
-  top_n(11, mean_relab) -> t
-
-tax %>%
-  left_join(t %>% transmute(Phylum, topphylum = Phylum), by = "Phylum") %>%
-  replace_na(list("topphylum" = "Other")) %>%
-  mutate(rank = coalesce(Genus, Family, Order, Class))-> taxref
-
-seqtab %>%
-  inner_join(taxref, by = "seqid") %>% 
-  inner_join(smd, by = 'sample') %>%
-  filter(groundwater == "SA1420A-1") %>%
-  # Summarize in order to have the sum for each category and topphylum
-  group_by(topphylum, id) %>% 
-  summarise(relab = sum(relab), .groups = 'drop') %>%
-  # Call the plot
-  ggplot(aes(x = fct_rev(id), y = relab, fill = fct_relevel(topphylum, c("Other")))) +
-  labs(x = '', y = 'Relative abundance') +
-  geom_col() +
-  scale_fill_brewer(palette = 'Paired') +
-  coord_flip() + 
-  scale_y_continuous(trans = 'reverse', labels = c('1.0','0.75','0.50','0.25','0')) +
-  theme_barplot() + theme(aspect.ratio = 1.0)
-```
-
-
-```{r export barplot phylum}
-ggsave("barplot_phylum.png", width = 12, height = 16, units = "cm")
-```
 
 
 ```{r lollipop mm}
@@ -258,7 +165,9 @@ specno %>%
   geom_point(aes(color = fraction), stroke = 0.8, size = 2, fill = "white", shape = 21) +
   labs(x = "Alpha diversity (Estimated No. ASVs)", y = "") +
   theme_tidy() +
-  scale_color_manual(name = "Size fraction inoculum", labels = c("> 0.1 µm","0.1 - 0.45 µm"), values = c(unfiltered = "black", filtered = "#e31a1c")) +
+  scale_color_manual(name = "Size fraction inoculum", 
+                     labels = c("> 0.1 µm","0.1 - 0.45 µm"), 
+                     values = c(unfiltered = "black", filtered = "#e31a1c")) +
   theme(legend.title = element_text(size = 6, face = "bold"),
         legend.position = c(0.75, 0.2),
         legend.box.background = element_rect(color = 'black', size = 0.5),
@@ -270,6 +179,8 @@ specno %>%
         axis.line.y.left = element_line(),
         panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4))
 ```
+
+
 ```{r export alphadiv}
 ggsave(filename = "figures/adiv.png", width = 8, height = 8, units = c("cm"))
 ```
@@ -321,7 +232,7 @@ ggsave(filename = "lollipop_specnumber.png", width = 14, height = 12, units = c(
 i <- c(
 "srm 10/2021 (07)","lys 10/2021 (09)","srm 10/2021 (10)","srm 10/2021 (26)","srm 10/2021 (27)",
 "ace 10/2021 (32)","srm 10/2021 (33)","srm 10/2021 (34)","lys 02/2021 (37)","lys 02/2021 (38)",
-"met 10/2021 (44)","met 10/2021 (45)","lys 10/2021 (54)","lys 10/2021 (55)","srm 10/2021 (56)",
+"met 10/2021 (44)","met 10/2021 (45)","lys 10/2021 (54)","lys 10/2021 (55)",
 "srm 10/2021 (57)","srm 03/2022 (61)","srm 03/2022 (62)","srm 03/2022 (63)","lys 03/2022 (68)",
 "lys 03/2022 (69)","srm 03/2022 (70)","srm 03/2022 (71)","srm 03/2022 (72)","lys 03/2022 (73)",
 "lys 03/2022 (74)","lys 03/2022 (75)","srm 03/2022 (77)","srm 03/2022 (78)","lys 03/2022 (79)",
@@ -331,20 +242,23 @@ i <- c(
 seqtab %>%
   inner_join(smd, by = "sample") %>%
   filter(id %in% i) %>%
-  inner_join(taxref, by = "seqid") %>%
-  group_by(sample, rank) %>% summarise(relab = sum(relab), .groups = "drop_last") %>%
+  inner_join(tax, by = "seqid") %>%
+  mutate(taxon = coalesce(genus,family,order)) %>%
+  group_by(sample, id, taxon) %>% summarise(relab = sum(relab) * 100, .groups = "drop_last") %>%
   slice_max(order_by = relab, n = 1) %>% ungroup() %>%
-  mutate(relab = round(relab, digits = 3) * 100) %>%
-  mutate(i = paste(rank, " (", relab, "%)", sep = "")) %>%
+  mutate(i = paste(taxon, " (", round(relab, digits = 1), "%)", sep = "")) %>%
   mutate(hjust = if_else(relab >= 70, 1.05, -0.07)) -> plotlab
   
 plotlab %>%
-  inner_join(smd, by = "sample") %>%
   ggplot(aes(x = fct_reorder(id, relab), y = relab)) +
   geom_segment(aes(xend = id, y = 30, yend = relab), color = "black", size = 0.1) +
   geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
   geom_label(aes(label = i, hjust = hjust), 
-            color = "black", fontface = "bold", size = 1.6, label.size = 0.1, label.padding = unit(0.10, "lines")) +
+            color = "black", 
+            fontface = "bold", 
+            size = 1.6, 
+            label.size = 0.1, 
+            label.padding = unit(0.10, "lines")) +
   coord_flip() +
   scale_y_continuous(expand = c(0.004,0), limits = c(30,100)) +
   labs(x = "Enrichtment culture", y = "Relative abundance (%)") +
@@ -367,31 +281,28 @@ seqtab %>%
   inner_join(smd, by = "sample") %>%
   filter(id %in% i) %>%
   inner_join(tax, by = "seqid") %>%
-  group_by(Order, sample) %>%
+  group_by(class, sample) %>%
   # Sum the abundance of each phylum within a sample
   summarise(relab = sum(relab), .groups = 'drop_last') %>%
   # Calculate the mean abundance of each phylum over the categories
   summarise(mean_relab = sum(relab), .groups = 'drop') %>%
-  filter(!is.na(Order)) %>%
+  filter(!is.na(class)) %>%
   top_n(11, mean_relab) -> t
 
 tax %>%
-  left_join(t %>% transmute(Order, topphylum = Order), by = "Order") %>%
+  left_join(t %>% transmute(class, topphylum = class), by = "class") %>%
   replace_na(list("topphylum" = "Other")) %>%
-  mutate(rank = coalesce(Genus, Family, Order, Class))-> taxref
-
-plotlab %>% inner_join(smd, by = "sample") %>% arrange(desc(relab)) %>% pull(id) -> ids
+  mutate(rank = coalesce(genus, family, order, class))-> taxref
 
 seqtab %>%
   inner_join(taxref, by = "seqid") %>% 
-  inner_join(smd, by = 'sample') %>%
-  filter(id %in% i) %>%
   # Summarize in order to have the sum for each category and topphylum
-  group_by(topphylum, id) %>% 
-  summarise(relab = sum(relab) * 100, .groups = 'drop') %>%
+  group_by(topphylum, sample) %>% 
+  summarise(mrelab = sum(relab), .groups = 'drop') %>%
+  inner_join(plotlab, by = "sample") %>%
   # Call the plot
-  ggplot(aes(x = fct_relevel(id, ids) %>% fct_rev(), 
-             y = relab, 
+  ggplot(aes(x = fct_reorder(id, relab), 
+             y = mrelab, 
              fill = fct_relevel(topphylum, c("Other")))) +
   labs(x = '', y = 'Relative abundance (%)') +
   geom_col() +
@@ -414,57 +325,277 @@ seqtab %>%
 ```{r patch interest}
 library(patchwork)
 
-p1 + p2
+p1 + p2 
 ```
 
 
-```{r export cowplot interest}
+```{r export patchwork interest}
 ggsave(filename = "figures/interest.png", width = 14, height = 10, units = c("cm"))
 ```
 
 
-```{r age scatterplot}
-specno %>%
-  filter(fraction != "filtered") %>%
-  ggplot(aes(x = age, y = specno)) +
-  geom_point()
+```{r}
+seqtab %>% 
+  inner_join(tax, by = "seqid") %>% 
+  filter(phylum == "Patescibacteria" | phylum == "Nanoarchaeota") %>% 
+  group_by(sample) %>% summarise(i = sum(relab)) %>% 
+  slice_max(i, n = 20) %>% pull(sample) -> i
+
+seqtab %>%
+  filter(sample %in% i) %>%
+  inner_join(smd, by = "sample") %>%
+  inner_join(tax, by = "seqid") %>%
+  filter(phylum == "Patescibacteria" | phylum == "Nanoarchaeota") %>% 
+  group_by(sample, id, taxon) %>% summarise(relab = sum(relab) * 100, .groups = "drop_last") %>%
+  slice_max(relab, n = 1) %>% ungroup() %>%
+  mutate(i = paste(taxon, " (", round(relab, digits = 1), "%)", sep = "")) %>%
+  mutate(hjust = if_else(relab >= 70, 1.05, -0.07)) -> plotlab
+  
+plotlab %>%
+  inner_join(smd, by = c("sample","id")) %>%
+  mutate(id = paste(
+    substr(groundwater, 1,6), " ", 
+    medium, " (",  
+    substr(fraction, 1,1), ")",
+    sep = "")
+    ) %>%
+  mutate(sample = gsub("P26201_10","",sample)) %>%
+  ggplot(aes(x = fct_reorder(sample, relab), y = relab)) +
+  geom_segment(aes(xend = sample, y = 0, yend = relab), color = "black", size = 0.1) +
+  geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
+  geom_label(aes(label = i, hjust = hjust), 
+            color = "black", 
+            fontface = "bold", 
+            size = 2, 
+            label.size = 0.1, 
+            label.padding = unit(0.10, "lines")) +
+  coord_flip(clip = "off") +
+  scale_x_discrete(labels = c(
+    "11" = "SA1420 ace (u)", "12" = "SA1420 ace (f)",
+    "67" = "KR0015 lys (f)", "36" = "SA1420 lys (f)",
+    "29" = "SA1420 lys (f)", "68" = "KR0015 lys (f)",
+    "25" = "SA1420 ace (f)", "17" = "SA1420 ana (u)",
+    "82" = "SA1420 lys (f)", "76" = "SA1420 srm (u)", 
+    "83" = "SA1420 lys (f)", "30" = "SA2600 srm (u)",
+    "31" = "SA2600 srm (u)", "16" = "SA1229 ana (u)",
+    "13" = "SA1229 ana (u)", "57" = "SA1420 srm (f)",
+    "14" = "KA2511 ana (u)", "78" = "KA2511 ana (u)",
+    "32" = "SA1420 ace (u)", "34" = "SA1420 srm (f)")
+  ) +
+  scale_y_continuous(expand = c(0.004,0), limits = c(0,25)) +
+  labs(x = "", y = "Relative abundance (%)") +
+  theme_tidy(fontsize = 7) +
+  theme(aspect.ratio = 2,
+        axis.text.y.left = element_text(face = "plain", family = "Courier New"),
+        plot.margin = margin(4,8,4,0),
+        axis.text.x.bottom = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        panel.border = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4)) -> p1
 ```
 
 
 ```{r}
-mypalette <- c("Acholeplasmatales" = "#1f78b4", "Bacteroidales" = "#b2df8a", "Burkholderiales" = "#33a02c", "Campylobacterales" = "#a6cee3",
-  "Desulfobulbales" = "#fb9a99", "Desulfovibrionales" = "#e31a1c", "Enterobacterales" = "#fdbf6f", "Eubacteriales" = "#ff7f00",
-  "Holophagales" = "#cab2d6", "Izemoplasmatales" = "#6a3d9a", "Rhodospirillales" = "#ffff99", "Sphaerochaetales" = "#b15928")
-
 seqtab %>%
+  filter(sample %in% i) %>%
   inner_join(smd, by = "sample") %>%
-  filter(id %in% i) %>%
-  inner_join(taxref, by = "seqid") %>%
-  group_by(sample, rank) %>% summarise(relab = sum(relab), order = first(Order), .groups = "drop_last") %>%
-  slice_max(order_by = relab, n = 1) %>% ungroup() %>%
-  mutate(relab = round(relab, digits = 3) * 100) %>%
-  mutate(i = paste(rank, " (", relab, "%)", sep = "")) %>%
-  mutate(hjust = if_else(relab >= 70, 1.05, -0.07)) -> plotlab
-
+  inner_join(tax, by = "seqid") %>%
+  group_by(sample, id, taxon) %>% summarise(relab = sum(relab) * 100, .groups = "drop_last") %>%
+  slice_max(relab, n = 1) %>% ungroup() %>%
+  mutate(i = paste(taxon, " (", round(relab, digits = 1), "%)", sep = "")) %>%
+  mutate(hjust = if_else(relab >= 50, 1.05, -0.07)) -> plotlab
+  
 plotlab %>%
-  select(-i) %>%
-  inner_join(smd, by = 'sample') %>%
-  filter(id %in% i) %>%
-  ggplot(aes(x = fct_relevel(id, ids) %>% fct_rev(),
-             y = NA, color = order)) +
-  geom_point(size = 3) +
-  scale_color_manual(values = mypalette) +
-  coord_flip() +
-  theme_void() +
+  inner_join(smd, by = c("sample","id")) %>%
+  mutate(id = paste(
+    substr(groundwater, 1,6), " ", 
+    medium, " (",  
+    substr(fraction, 1,1), ")",
+    sep = "")
+    ) %>%
+  mutate(sample = gsub("P26201_10","",sample)) %>%
+  ggplot(aes(x = fct_rev(fct_relevel(sample,c(
+    "11", "12",
+    "67", "36",
+    "29", "68",
+    "25", "17",
+    "82", "76", 
+    "83", "30",
+    "31", "16",
+    "13", "57",
+    "14", "78",
+    "32", "34")
+    )), 
+    y = relab)) +
+  geom_segment(aes(xend = sample, y = 0, yend = relab), color = "black", size = 0.1) +
+  geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
+  geom_label(aes(label = i, hjust = hjust), 
+            color = "black", 
+            fontface = "bold", 
+            size = 2, 
+            label.size = 0.1, 
+            label.padding = unit(0.10, "lines")) +
+  coord_flip(clip = "off") +
+  scale_y_continuous(expand = c(0.004,0), limits = c(0,100)) +
+  labs(x = "", y = "Relative abundance (%)") +
+  theme_tidy(fontsize = 7) +
   theme(aspect.ratio = 2,
-        plot.margin = margin(4,0,4,0),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 6, colour = "black"),
-        legend.box.margin = margin(0,0,0,0)) -> p3
- 
-p1 + p3
+        axis.text.y.left = element_blank(),
+        plot.margin = margin(4,8,4,0),
+        axis.text.x.bottom = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        panel.border = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4)) -> p2
 ```
 
 
 
+```{r}
+cols <- c(
+  "Actinomycetia" = "#a6cee3",
+  "Bacteroidia" = "#1f78b4",
+  "Dehalococcoidia" = "#b2df8a",
+  "Bacilli" = "#33a02c",
+  "Clostridia" = "#fb9a99",
+  "Nanoarchaeia" = "#e31a1c",
+  "Kol11" = "#fdbf6f",
+  "ABY1" = "#ff7f00",
+  "Paceibacteria" = "#cab2d6",
+  "Alphaproteobacteria" = "#6a3d9a",
+  "Gammaproteobacteria" = "#ffff99",
+  "Other" = "#b15928"
+)
+
+
+seqtab %>%
+  filter(sample %in% i) %>%
+  inner_join(tax, by = "seqid") %>%
+  group_by(class, sample) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  filter(!is.na(class)) %>%
+  top_n(11, mean_relab) -> t
+
+tax %>%
+  left_join(t %>% transmute(class, topphylum = class), by = "class") %>%
+  replace_na(list("topphylum" = "Other")) -> taxref
+
+seqtab %>%
+  inner_join(taxref, by = "seqid") %>%
+  mutate(label = if_else(topphylum != "Other", 
+                         paste0(topphylum," (",phylum,")"), 
+                         topphylum)
+         ) %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(label, sample) %>% 
+  summarise(mrelab = sum(relab), .groups = 'drop') %>%
+  inner_join(plotlab, by = "sample") %>%
+  mutate(sample = gsub("P26201_10","",sample)) %>%
+  # Call the plot
+  ggplot(aes(x = fct_rev(fct_relevel(sample,c(
+    "11", "12",
+    "67", "36",
+    "29", "68",
+    "25", "17",
+    "82", "76", 
+    "83", "30",
+    "31", "16",
+    "13", "57",
+    "14", "78",
+    "32", "34")
+    )),  
+             y = mrelab, 
+             fill = fct_relevel(label, c("Actinomycetia (Actinobacteriota)",
+                                         "Bacteroidia (Bacteroidota)",
+                                         "Dehalococcoidia (Chloroflexota)",
+                                         "Bacilli (Firmicutes)",
+                                         "Clostridia (Firmicutes)",
+                                         "Nanoarchaeia (Nanoarchaeota)",
+                                         "Koll11 (Omnitrophota)",
+                                         "ABY1 (Patescibacteria)",
+                                         "Paceibacteria (Patescibacteria)",
+                                         "Alphaproteobacteria (Proteobacteria)",
+                                         "Gammaproteobacteria (Proteobacteria)",
+                                         "Other")))) +
+  labs(x = '', y = 'Relative abundance (%)') +
+  geom_col() +
+  scale_fill_brewer(palette = 'Paired') +
+  coord_flip() + 
+  scale_y_continuous(trans = 'reverse', labels = c('100','','50','','0'), expand = c(0.004,0)) +
+  theme_barplot(fontsize = 7) + 
+  #guides(fill = guide_legend(nrow = 12)) +
+  theme(aspect.ratio = 2,
+        axis.text.y = element_blank(),
+        plot.margin = margin(4,4,4,0),
+        axis.text.x = element_text(face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        legend.position = "right",
+        legend.text = element_text(size = 7, color = "black"),
+        legend.key.size = unit(3, "mm")) -> p3
+```
+
+
+```{r patch interest}
+library(patchwork)
+
+p1 + p2 + p3
+```
+
+```{r export patchwork interest}
+ggsave(filename = "figures/patesci.png", width = 22, height = 12, units = c("cm"))
+```
+
+
+
+```{r}
+seqtab %>%
+  inner_join(tax, by = "seqid") %>%
+  filter(sample %in% interest) %>%
+  group_by(phylum,sample) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  filter(!is.na(phylum)) %>%
+  top_n(11, mean_relab) -> t
+
+tax %>%
+  left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
+  replace_na(list("topphylum" = "Other")) -> taxref
+
+seqtab %>%
+  filter(sample %in% interest) %>%
+  inner_join(taxref, by = "seqid") %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(topphylum, sample) %>% 
+  summarise(mrelab = sum(relab), .groups = 'drop') %>%
+  # Call the plot
+  ggplot(aes(x = sample %>% fct_rev(),
+             y = mrelab, 
+             fill = fct_relevel(topphylum, c("Other"), after = 11) 
+                        )
+         ) +
+  labs(x = '', y = 'Relative abundance (%)') +
+  geom_col() +
+  coord_flip() +
+  scale_fill_brewer(palette = 'Paired') +
+  scale_y_continuous(trans = 'reverse', labels = c('100','75','50','25','0'), expand = c(0.004,0)) +
+  theme_barplot(fontsize = 7) + 
+  #guides(fill = guide_legend(nrow = 12)) +
+  theme(aspect.ratio = 2,
+        plot.margin = margin(4,4,4,0),
+        axis.text.x = element_text(face = "bold"),
+        axis.title.x = element_text(face = "bold"),
+        legend.position = "right",
+        legend.text = element_text(size = 7, color = "black"),
+        legend.key.size = unit(3, "mm")) #-> p3
+```
 
