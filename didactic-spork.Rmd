@@ -30,11 +30,24 @@ source("/Users/geweaa/Box Sync/Protocols/barplot.R")
 
 
 ```{r files}
-seqtab <- read_tsv("ASV_table.tsv", col_types = cols(.default = col_character(), count = col_integer())) %>%
-  group_by(sample) %>% mutate(relab = count/sum(count)) %>% ungroup() # Add relative abundance
-  
+seqtab <- read_tsv("ASV_table.tsv", col_types = cols(.default = col_character(), count = col_integer())) 
 tax <- read_tsv("tax.P21015.P26201.tsv", col_types = cols(.default = col_character()))
-smd <- read_tsv("smd.P21015.P26201.tsv", col_types = cols(.default = col_character())) 
+smd <- read_tsv("smd.P21015.P26201.tsv", col_types = cols(.default = col_character())) %>%
+  mutate(label = paste(medium," (",substr(fraction,1,1),")", sep = ""))
+
+seqtab %>% inner_join(smd, by = "sample") %>% filter(age == "ctrl" & medium == "ace") %>% pull(seqid) %>% unique() -> ace
+seqtab %>% inner_join(smd, by = "sample") %>% filter(age == "ctrl" & medium == "lys") %>% pull(seqid) %>% unique() -> lys
+
+seqtab %>%
+  inner_join(smd, by = "sample") %>%
+  filter(
+    age != "ctrl" |
+    substr(sample,1,6) == "P21015" & medium == "ace" & !seqid %in% ace |
+    substr(sample,1,6) == "P21015" & medium == "lys" & !seqid %in% lys |
+    substr(sample,1,6) == "P26201"
+    ) %>%
+  group_by(sample) %>% mutate(relab = count/sum(count)) %>% ungroup() %>%
+  select(sample,seqid,count,relab) -> seqtab
 ```
 
 
@@ -229,96 +242,98 @@ ggsave(filename = "lollipop_specnumber.png", width = 14, height = 12, units = c(
 
 
 ```{r lollipop interest}
-i <- c(
-"srm 10/2021 (07)","lys 10/2021 (09)","srm 10/2021 (10)","srm 10/2021 (26)","srm 10/2021 (27)",
-"ace 10/2021 (32)","srm 10/2021 (33)","srm 10/2021 (34)","lys 02/2021 (37)","lys 02/2021 (38)",
-"met 10/2021 (44)","met 10/2021 (45)","lys 10/2021 (54)","lys 10/2021 (55)",
-"srm 10/2021 (57)","srm 03/2022 (61)","srm 03/2022 (62)","srm 03/2022 (63)","lys 03/2022 (68)",
-"lys 03/2022 (69)","srm 03/2022 (70)","srm 03/2022 (71)","srm 03/2022 (72)","lys 03/2022 (73)",
-"lys 03/2022 (74)","lys 03/2022 (75)","srm 03/2022 (77)","srm 03/2022 (78)","lys 03/2022 (79)",
-"lys 03/2022 (80)","lys 03/2022 (81)"
-)
-
-seqtab %>%
-  inner_join(smd, by = "sample") %>%
-  filter(id %in% i) %>%
+seqtab %>% # Select the cultures of interest
   inner_join(tax, by = "seqid") %>%
-  mutate(taxon = coalesce(genus,family,order)) %>%
-  group_by(sample, id, taxon) %>% summarise(relab = sum(relab) * 100, .groups = "drop_last") %>%
+  filter(phylum %in% c("Patescibacteria","Nanoarchaeota")) %>%
+  group_by(sample, phylum) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  inner_join(smd, by = "sample") %>%
+  top_n(30, mean_relab) %>%
+  arrange(mean_relab) -> hot
+
+seqtab %>% # Prepare the labels
+  inner_join(tax, by = "seqid") %>%
+  group_by(sample, taxon) %>% summarise(relab = sum(relab) * 100, .groups = "drop_last") %>%
   slice_max(order_by = relab, n = 1) %>% ungroup() %>%
   mutate(i = paste(taxon, " (", round(relab, digits = 1), "%)", sep = "")) %>%
-  mutate(hjust = if_else(relab >= 70, 1.05, -0.07)) -> plotlab
+  mutate(hjust = if_else(relab >= 50, 1.05, -0.07)) %>%
+  inner_join(smd, by = "sample") -> plotlab
   
 plotlab %>%
-  ggplot(aes(x = fct_reorder(id, relab), y = relab)) +
-  geom_segment(aes(xend = id, y = 30, yend = relab), color = "black", size = 0.1) +
+  filter(sample %in% hot$sample) %>%
+  ggplot(aes(x = fct_relevel(sample, hot$sample), 
+             y = relab)) +
+  geom_segment(aes(xend = sample, 
+                   y = 0, 
+                   yend = relab), 
+               color = "black", size = 0.1) +
   geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
   geom_label(aes(label = i, hjust = hjust), 
             color = "black", 
-            fontface = "bold", 
-            size = 1.6, 
+            fontface = "bold",
+            size = 7/.pt, 
             label.size = 0.1, 
             label.padding = unit(0.10, "lines")) +
   coord_flip() +
-  scale_y_continuous(expand = c(0.004,0), limits = c(30,100)) +
-  labs(x = "Enrichtment culture", y = "Relative abundance (%)") +
+  scale_x_discrete(labels = hot$label) +
+  labs(x = "", y = "") +
   theme_tidy() +
   theme(aspect.ratio = 2,
-        plot.margin = margin(4,8,4,0),
-        axis.text.x.bottom = element_text(face = "bold"),
+        axis.text.y.left = element_text(size = 7),
+        axis.ticks.x = element_blank(),
+        plot.margin = margin(4,0,4,0),
+        axis.text.x.bottom = element_blank(),
         axis.title = element_text(face = "bold"),
-        axis.ticks.length = unit(0.12, "cm"),
         panel.border = element_blank(),
-        axis.line.x.bottom = element_line(),
         axis.ticks.y = element_blank(),
-        panel.background = element_blank(),
-        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4)) -> p1
+        panel.background = element_blank()) -> p1
 ```
 
 
 ```{r barplot interest order}
 seqtab %>%
-  inner_join(smd, by = "sample") %>%
-  filter(id %in% i) %>%
   inner_join(tax, by = "seqid") %>%
-  group_by(class, sample) %>%
+  group_by(phylum, sample) %>%
   # Sum the abundance of each phylum within a sample
   summarise(relab = sum(relab), .groups = 'drop_last') %>%
   # Calculate the mean abundance of each phylum over the categories
   summarise(mean_relab = sum(relab), .groups = 'drop') %>%
-  filter(!is.na(class)) %>%
+  filter(!is.na(phylum)) %>%
   top_n(11, mean_relab) -> t
 
 tax %>%
-  left_join(t %>% transmute(class, topphylum = class), by = "class") %>%
-  replace_na(list("topphylum" = "Other")) %>%
-  mutate(rank = coalesce(genus, family, order, class))-> taxref
+  left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
+  replace_na(list("topphylum" = "Other")) -> taxref
 
 seqtab %>%
-  inner_join(taxref, by = "seqid") %>% 
+  filter(sample %in% hot$sample) %>%
+  inner_join(taxref, by = "seqid") %>%
   # Summarize in order to have the sum for each category and topphylum
-  group_by(topphylum, sample) %>% 
+  group_by(sample, topphylum) %>% 
   summarise(mrelab = sum(relab), .groups = 'drop') %>%
-  inner_join(plotlab, by = "sample") %>%
   # Call the plot
-  ggplot(aes(x = fct_reorder(id, relab), 
+  ggplot(aes(x = fct_relevel(sample, hot$sample), 
              y = mrelab, 
              fill = fct_relevel(topphylum, c("Other")))) +
   labs(x = '', y = 'Relative abundance (%)') +
   geom_col() +
   scale_fill_brewer(palette = 'Paired') +
   coord_flip() + 
-  scale_y_continuous(trans = 'reverse', labels = c('100','','50','','0'), expand = c(0.004,0)) +
-  theme_barplot() + 
-  theme(aspect.ratio = 3, 
+  scale_y_continuous(trans = 'reverse', labels = c('100','75','50','25','0'), expand = c(0.004,0)) +
+  theme_barplot(fontsize = 7) + 
+  theme(aspect.ratio = 2, 
         axis.text.y = element_blank(),
+        axis.ticks.length.x = unit(0.5, "mm"),
         axis.line.x.bottom = element_line(),
-        plot.margin = margin(4,4,4,0),
+        plot.margin = margin(4,4,0,0),
         axis.text.x = element_text(face = "bold"),
         axis.title.x = element_text(face = "bold"),
         legend.position = "right",
-        legend.text = element_text(size = 6, color = "black"),
-        legend.key.size = unit(3, "mm")) -> p2
+        legend.text = element_text(size = 7, color = "black"),
+        legend.key.size = unit(3.2, "mm")) -> p2
 ```
 
 
@@ -330,7 +345,7 @@ p1 + p2
 
 
 ```{r export patchwork interest}
-ggsave(filename = "figures/interest.png", width = 14, height = 10, units = c("cm"))
+ggsave(filename = "figures/patesci.png", width = 20, height = 14, units = c("cm"))
 ```
 
 
@@ -396,64 +411,6 @@ plotlab %>%
         panel.background = element_blank(),
         panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4)) -> p1
 ```
-
-
-```{r}
-seqtab %>%
-  filter(sample %in% i) %>%
-  inner_join(smd, by = "sample") %>%
-  inner_join(tax, by = "seqid") %>%
-  group_by(sample, id, taxon) %>% summarise(relab = sum(relab) * 100, .groups = "drop_last") %>%
-  slice_max(relab, n = 1) %>% ungroup() %>%
-  mutate(i = paste(taxon, " (", round(relab, digits = 1), "%)", sep = "")) %>%
-  mutate(hjust = if_else(relab >= 50, 1.05, -0.07)) -> plotlab
-  
-plotlab %>%
-  inner_join(smd, by = c("sample","id")) %>%
-  mutate(id = paste(
-    substr(groundwater, 1,6), " ", 
-    medium, " (",  
-    substr(fraction, 1,1), ")",
-    sep = "")
-    ) %>%
-  mutate(sample = gsub("P26201_10","",sample)) %>%
-  ggplot(aes(x = fct_rev(fct_relevel(sample,c(
-    "11", "12",
-    "67", "36",
-    "29", "68",
-    "25", "17",
-    "82", "76", 
-    "83", "30",
-    "31", "16",
-    "13", "57",
-    "14", "78",
-    "32", "34")
-    )), 
-    y = relab)) +
-  geom_segment(aes(xend = sample, y = 0, yend = relab), color = "black", size = 0.1) +
-  geom_point(stroke = 0.8, size = 1, fill = "white", shape = 21) +
-  geom_label(aes(label = i, hjust = hjust), 
-            color = "black", 
-            fontface = "bold", 
-            size = 2, 
-            label.size = 0.1, 
-            label.padding = unit(0.10, "lines")) +
-  coord_flip(clip = "off") +
-  scale_y_continuous(expand = c(0.004,0), limits = c(0,100)) +
-  labs(x = "", y = "Relative abundance (%)") +
-  theme_tidy(fontsize = 7) +
-  theme(aspect.ratio = 2,
-        axis.text.y.left = element_blank(),
-        plot.margin = margin(4,8,4,0),
-        axis.text.x.bottom = element_text(face = "bold"),
-        axis.title = element_text(face = "bold"),
-        panel.border = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.ticks.y = element_blank(),
-        panel.background = element_blank(),
-        panel.grid.major.x = element_line(colour = "grey", linetype = "dotted", size = 0.4)) -> p2
-```
-
 
 
 ```{r}
