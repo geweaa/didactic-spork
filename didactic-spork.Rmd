@@ -30,9 +30,24 @@ source("/Users/geweaa/Box Sync/Protocols/barplot.R")
 
 
 ```{r files}
-seqtab <- read_tsv("ASV_table.tsv", col_types = cols(.default = col_character(), count = col_integer(), relab = col_double())) 
-tax <- read_tsv("tax[combined].tsv", col_types = cols(.default = col_character()))
-smd <- read_tsv("smd.tsv", col_types = cols(.default = col_character()))
+seqtab <- read_tsv("ASV_table.tsv", col_types = cols(.default = col_character(), 
+                                    count = col_integer()
+                                    )) 
+
+# Use GTDB release R07-RS207 throughout the analysis (version 207)
+# Cite https://doi.org/10.17044/scilifelab.14869077.v4
+# P15009 (Sci-life contract id M.Dopson_19_05) was sampled for cultures and feeding experiment
+# P21015 (Sci-life contract id M.Dopson_21_01) was sampled for Larwence Berkeley National Laboratory
+# P15009 was sampled Oct 2019, P21015 was sampled Feb 2020
+# QK-1636 refers to the survey study, KR0015 not included in this study
+# QK1636-S58, S59 and S60 for SA1420, S40 + S41 and S42 for SA2600. 
+
+tax <- read_tsv("ASV_tax.tsv", col_types = cols(.default = col_character())
+                ) %>% mutate(taxon = coalesce(genus,family,order,class,phylum,kingdom,domain))
+smd <- read_tsv("smd.tsv", col_types = cols(.default = col_character())
+                ) %>% 
+  filter(groundwater %in% c("KR0015","SA1420","SA2600")) %>%
+  filter(substr(sample, 1,6) != "QK1636")
 
 seqtab %>% 
   inner_join(smd, by = "sample") %>% 
@@ -123,14 +138,14 @@ seqtab %>%
 
 ```{r plot alpha diversity}
 adiv %>%
-  filter(!sample %in% c("P26201_1021","P26201_1022","P26201_1030","P26201_1031")) %>%
+  #filter(!sample %in% c("P26201_1021","P26201_1022","P26201_1030","P26201_1031")) %>%
   mutate(fraction = if_else(fraction == 'filtered',
                             '0.1 - 0.45 µm',
                             '> 0.1 µm')
          ) %>%
   replace_na(list("fraction" = "Environmental")) %>%
-  filter(groundwater %in% c("KR0015","SA1420","KA3511","SA2600")) %>%
-  ggplot(aes(x = fct_relevel(groundwater, c("KR0015","SA1420","KA3511","SA2600")),
+  filter(groundwater %in% c("KR0015","SA1420","SA2600")) %>%
+  ggplot(aes(x = fct_relevel(groundwater, c("KR0015","SA1420","SA2600")),
              y = shannon)) +
   geom_boxplot(aes(fill = fct_relevel(fraction, c("Environmental"))), 
                outlier.color = "white") +
@@ -292,10 +307,13 @@ ggsave(filename = "figures/cpr.pdf", width = 16, height = 10, units = c("cm"))
 
 ```{r run nmds, results='hide'}
 set.seed(999)
+out <- c("QK1636-S58","QK1636-S59","QK1636-S60","QK1636-S40","QK1636-S41","QK1636-S42")
+
 nmds1 <- seqtab %>%
   inner_join(smd, by = "sample") %>%
   filter(fraction == "unfiltered" | is.na(fraction)) %>%
-  filter(groundwater %in% c("SA1420","KR0015","SA2600","KA3511")) %>%
+  filter(groundwater %in% c("SA1420","KR0015","SA2600")) %>%
+  filter(!sample %in% out) %>%
   group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
   select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
   column_to_rownames("sample") %>%
@@ -304,7 +322,8 @@ nmds1 <- seqtab %>%
 nmds2 <- seqtab %>%
   inner_join(smd, by = "sample") %>%
   filter(fraction == "filtered" | is.na(fraction)) %>%
-  filter(groundwater %in% c("SA1420","KR0015","SA2600","KA3511")) %>%
+  filter(!sample %in% out) %>%
+  filter(groundwater %in% c("SA1420","KR0015","SA2600")) %>%
   group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
   select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
   column_to_rownames("sample") %>%
@@ -335,8 +354,7 @@ nmds.scores %>%
   scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = ""
                     ) +
   scale_color_manual(name = "Groundwater:",values = c(
-    "KR0015" = "#a6cee3","SA1420" = "#1f78b4", 
-    "KA3511" = "#33a02c","SA2600" = "#b2df8a")
+    "KR0015" = "#a6cee3","SA1420" = "#1f78b4","SA2600" = "#b2df8a")
     ) +
   annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
            label = paste('Stress = ', round(nmds1$stress, digits = 2)),
@@ -371,8 +389,7 @@ nmds.scores %>%
   scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = ""
                     ) +
   scale_color_manual(name = "Groundwater:",values = c(
-    "KR0015" = "#a6cee3","SA1420" = "#1f78b4", 
-    "KA3511" = "#33a02c","SA2600" = "#b2df8a")
+    "KR0015" = "#a6cee3","SA1420" = "#1f78b4","SA2600" = "#b2df8a")
     ) +
   annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
            label = paste('Stress = ', round(nmds2$stress, digits = 2)),
@@ -539,7 +556,7 @@ growth %>% # SA2600
   scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
                           as.Date("15-02-2022", format = "%d-%m-%Y"))) +
   scale_y_log10(limits = c(1e4,1e8),
-                breaks = c(1e4,18550,1e5,1e6),
+                breaks = c(1e4,18550,1e5,1e6,1e7),
                 labels = c(expression(bold("10"^"4")),
                            expression(bold("t"["0"])),
                            expression(bold("10"^"5")),
@@ -553,8 +570,10 @@ growth %>% # SA2600
   theme_tidy(fontsize = 7) +
   coord_cartesian(clip = "off") +
   geom_hline(yintercept = 18550, size = 6, alpha = 0.3) + # t0
-  geom_hline(yintercept = 1e4, size = 0.6, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e5, size = 0.6, colour = "grey", linetype = "dotted") +
+  geom_hline(yintercept = 1e4, size = 0.4, colour = "grey", linetype = "dotted") +
+  geom_hline(yintercept = 1e5, size = 0.4, colour = "grey", linetype = "dotted") +
+  geom_hline(yintercept = 1e6, size = 0.4, colour = "grey", linetype = "dotted") +
+  geom_hline(yintercept = 1e7, size = 0.4, colour = "grey", linetype = "dotted") +
   annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
            y = 221000, label = "SRB", size = 6/.pt, hjust = 0) +
@@ -578,12 +597,12 @@ p1 + p2 + p3 + plot_layout(guides = "collect") & theme(legend.position = "bottom
 ```
 
 ```{r export growth}
-ggsave(filename = "figures/growth.png", width = 22, height = 8, units = c("cm"))
+ggsave(filename = "figures/growth.png", width = 20, height = 8, units = c("cm"))
 ```
 
 
 ```{r plot qpcr}
-read_tsv('qpcr.tsv', col_types = cols(.default = col_character(), 
+read_tsv('data/qpcr.tsv', col_types = cols(.default = col_character(), 
                                       quantity = col_double(),
                                       age = col_factor(levels = seq(1:10) %>% as.character())
                                       )
@@ -632,7 +651,7 @@ qpcr %>%
 
 
 ```{r export qpcr}
-ggsave(filename = "figures/qpcr.png", width = 16, height = 10, units = c("cm"))
+ggsave(filename = "figures/qpcr.png", width = 16, height = 8, units = c("cm"))
 ```
 
 
@@ -680,7 +699,7 @@ seqtab %>%
   # Call the plot
   ggplot(aes(x = age, 
              y = relab, 
-             fill = topphylum)
+             fill = fct_relevel(topphylum, c("Other")))
          ) +
   geom_area() + scale_x_continuous(n.breaks = 10) +
   facet_wrap(~ fraction) +
@@ -701,8 +720,14 @@ ggsave("figures/areaplot_phylum.png", height = 14, width = 16, units = "cm")
 
 
 ```{r plot environmental communities (t0)}
+# Use the samples from P15009 and P21015 as t0
+i <- c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+       "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+       "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+       )
+
 seqtab %>%
-  inner_join(smd, by = "sample") %>% filter(medium == "env") %>%
+  filter(sample %in% i) %>%
   inner_join(tax, by = "seqid") %>%
   group_by(phylum, sample) %>%
   # Sum the abundance of each phylum within a sample
@@ -718,30 +743,29 @@ tax %>%
   replace_na(list("topphylum" = "Other")) -> taxref
 
 seqtab %>%
-  inner_join(smd, by = "sample") %>% filter(medium == "env") %>%
+  filter(sample %in% i) %>%
   inner_join(taxref, by = "seqid") %>%
   # Summarize in order to have the sum for each category and topphylum
   group_by(sample, topphylum) %>% 
   summarise(mrelab = sum(relab), .groups = 'drop') %>%
-  mutate(topphylum = gsub("Caldatribacteriota","Atribacterota",topphylum)) %>% 
   # Call the plot
-  ggplot(aes(x = fct_relevel(sample, c("P21015_1020","P21015_1021","P21015_1022",
-                                       "P21015_1023","P21015_1024","P21015_1025",
-                                       "P26201_1051","P26201_1052",
-                                       "P21015_1029","P21015_1030","P21015_1031")
-                             ), 
+  ggplot(aes(x = fct_relevel(sample, i), 
              y = mrelab*100, 
              fill = fct_relevel(topphylum, c("Unidentified","Other")))) +
   labs(x = '', y = 'Relative abundance (%)', fill = "Phylum") +
   geom_col() +
   annotate(geom = "segment", x = 0.55, xend = 3.45, y = -2, yend = -2) +
   annotate(geom = "segment", x = 3.55, xend = 6.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 6.55, xend = 8.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 8.55, xend = 11.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 6.55, xend = 9.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 9.55, xend = 12.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -2, yend = -2) +
   annotate(geom = "text", x = 2, y = -5, label = "KR0015", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 5, y = -5, label = "SA1420", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 7.5, y = -5, label = "KA3385", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 10, y = -5, label = "SA2600", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 5, y = -5, label = "KR0015", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 8, y = -5, label = "SA1420", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 11, y = -5, label = "SA1420", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 14, y = -5, label = "SA2600", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 17, y = -5, label = "SA2600", size = 7/.pt, fontface = "bold") +
   scale_fill_brewer(palette = 'Paired') +
   theme_barplot(fontsize = 7) + 
   theme(axis.ticks.y = element_line(),
@@ -762,3 +786,111 @@ seqtab %>%
 ggsave("figures/t0_phylum.pdf", height = 10, width = 16, units = "cm")
 ggsave("figures/t0_phylum.png", height = 10, width = 16, units = "cm")
 ```
+
+
+```{r t0 comparison among groundwaters temporal variation}
+# KR0015: P15009_1057, 1059 and 1060 + P21015_1020, 1021 and 1022
+# SA1420: P15009_1061, 1065 and 1066 + P21015_1023, 1024 and 1025
+# SA2600: P15009_1069, 1062 and 1063 + P21015_1029, 1030 and 1031
+# P15009 was sampled Oct 2019, P21015 was sampled Feb 2020, QK-1636 was sampled between Feb and May 2017
+# QK-1636 refers to the survey study, KR0015 not included in this study
+# QK1636-S58, S59 and S60 for SA1420, S40 + S41 and S42 for SA2600. 
+
+
+i <- c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+       "QK1636-S58", "QK1636-S59", "QK1636-S60", # SA1420 survey
+       "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+       "QK1636-S40", "QK1636-S41", "QK1636-S42", # SA2600 survey
+       "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+       )
+
+
+seqtab %>%
+  inner_join(smd, by = "sample") %>%
+  filter(sample %in% i) %>%
+  inner_join(taxref, by = "seqid") %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(sample, topphylum) %>% 
+  summarise(mrelab = sum(relab), .groups = 'drop') %>%
+  # Call the plot
+  ggplot(aes(x = fct_relevel(sample, i), 
+             y = mrelab*100, 
+             fill = fct_relevel(topphylum, c("Unidentified","Other")))) +
+  labs(x = '', 
+       y = 'Relative abundance (%)', 
+       fill = "Phylum (GTDB-SBDI v207)",
+       caption = "i: sampling date Feb - May '17 as part of survey\nii: sampling date Oct '19 for cultures/feeding\niii: Feb '20 for Lawrence Berkeley National Laboratory") +
+  geom_col() +
+  annotate(geom = "segment", x = 0.55, xend = 3.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 3.55, xend = 6.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 6.55, xend = 9.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 9.55, xend = 12.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 18.55, xend = 21.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 21.55, xend = 24.45, y = -2, yend = -2) +
+  annotate(geom = "text", x = 2, y = -5, label = "KR0015 (ii)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 5, y = -5, label = "KR0015 (iii)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 8, y = -5, label = "SA1420 (i)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 11, y = -5, label = "SA1420 (ii)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 14, y = -5, label = "SA1420 (iii)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 17, y = -5, label = "SA2600 (i)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 20, y = -5, label = "SA2600 (ii)", size = 7/.pt, fontface = "bold") +
+  annotate(geom = "text", x = 23, y = -5, label = "SA2600 (iii)", size = 7/.pt, fontface = "bold") +
+  scale_fill_brewer(palette = 'Paired') +
+  theme_barplot(fontsize = 7) + 
+  theme(axis.ticks.y = element_line(),
+        axis.text.y = element_text(size = 7, face = "bold"),
+        axis.ticks.length.x = unit(0.5, "mm"),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        panel.border = element_rect(colour = "black", size = .75, fill = NA),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        plot.caption = element_text(size = 7, colour = "black", hjust = 0),
+        legend.title = element_text(size = 7, face = "bold"),
+        legend.text = element_text(size = 7, color = "black"),
+        legend.key.size = unit(4, "mm"))
+```
+
+
+```{r export t0 plot}
+ggsave("figures/temp_var_phylum.pdf", height = 12, width = 18, units = "cm")
+ggsave("figures/temp_var_phylum.png", height = 12, width = 18, units = "cm")
+```
+
+
+```{r most abundant taxa}
+seqtab %>% 
+  inner_join(smd) %>% 
+  filter(groundwater %in% c("SA1420","KR0015","SA2600") & medium == "env") %>% 
+  inner_join(tax) %>% group_by(taxon) %>% 
+  summarise(n = sum(relab)) %>% 
+  slice_max(n, n = 25) %>%
+  pull(taxon) -> t
+
+seqtab %>%
+  inner_join(tax, by = "seqid") %>% filter(taxon %in% t) %>%
+  group_by(sample, taxon) %>% summarise(relab = sum(relab)*100, .groups = "drop") %>%
+  inner_join(smd, by = "sample") %>% 
+  filter(groundwater %in% c("SA1420","KR0015","SA2600")) %>%
+  filter(relab >= 1) %>%
+  ggplot(aes(x = relab, y = fct_relevel(taxon, rev(t)))
+         ) +
+  geom_boxplot(fill = "#d9d9d9", size = 0.3) +
+  scale_x_log10(breaks = c(0.1,1,10,100), labels = c("0.1", "1", "10", "100")) +
+  labs(x = "Relative abundance (%)") +
+  facet_wrap(~groundwater) +
+  theme_tidy(fontsize = 7, ratio = 2) +
+  theme(
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(face = "plain"),
+    strip.text = element_text(size = 7, face = "bold")
+  )
+```
+```{r export boxplot abundant taxa}
+ggsave("figures/boxplot_top.pdf", height = 10, width = 16, units = "cm")
+ggsave("figures/boxplot_top.png", height = 10, width = 16, units = "cm")
+```
+
