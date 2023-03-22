@@ -17,17 +17,22 @@ output:
     encoding: "UTF-8"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, cache = TRUE, fig.path = "/figures")
-ggplot2::theme_set(ggplot2::theme_bw(base_size = 7))
-library(tidyverse)
-```
-
-
 ```{r themes}
 source("/Users/geweaa/Box Sync/Protocols/theme.R")
-source("/Users/geweaa/Box Sync/Protocols/barplot.R")
 ```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, fig.path = "/figures")
+library(tidyverse)
+theme_set(theme_tidy())
+```
+
+# KR0015: P15009_1057, 1059 and 1060 + P21015_1020, 1021 and 1022
+# SA1420: P15009_1061, 1065 and 1066 + P21015_1023, 1024 and 1025
+# SA2600: P15009_1069, 1062 and 1063 + P21015_1029, 1030 and 1031
+# P15009 was sampled Oct 2019, P21015 was sampled Feb 2020, QK-1636 was sampled between Feb and May 2017
+# QK-1636 refers to the survey study, KR0015 not included in this study
+# QK1636-S58, S59 and S60 for SA1420, S40 + S41 and S42 for SA2600. 
 
 
 ```{r files}
@@ -73,9 +78,9 @@ seqtab %>%
 
 
 ```{r define colours}
-cols.gw <- c("KR0015" = "#a6cee3",
+cols.gw <- c("KR0015" = "#b15928",
              "SA1420" = "#1f78b4",
-             "SA2600" = "#b2df8a")
+             "SA2600" = "#33a02c")
 
 cols.fraction <- c("Environmental" = "#d9d9d9",
                    "0.1 - 0.45 µm" = "#1f78b4",
@@ -83,7 +88,7 @@ cols.fraction <- c("Environmental" = "#d9d9d9",
 ```
 
 
-#### Alpha diversity ####
+### Alpha diversity ###
 
 Estimate alpha diversity using the Shannon-Weaver index on species level
 
@@ -99,61 +104,43 @@ seqtab %>%
 ```
 
 
-```{r plot alpha diversity}
+```{r plot alpha diversity, fig.width = 10/2.53}
 adiv %>%
   mutate(fraction = if_else(fraction == 'filtered',
                             '0.1 - 0.45 µm',
                             '> 0.1 µm')
          ) %>%
   replace_na(list("fraction" = "Environmental")) %>%
-  filter(groundwater %in% c("KR0015","SA1420","SA2600")) %>%
   ggplot(aes(x = fct_relevel(groundwater, c("KR0015","SA1420","SA2600")),
              y = shannon)) +
   geom_boxplot(aes(fill = fct_relevel(fraction, c("Environmental"))), 
                outlier.color = "white") +
-  labs(x = "", y = "Alpha diversity (Shannon's H index)") +
-  theme_tidy(fontsize = 7) +
-  scale_fill_manual(values = c("#d9d9d9","#a6cee3","#1f78b4")) +
-  theme(axis.text.x = element_text(face = "bold"),
-        legend.position = c(.85,.85),
-        legend.key.size = unit(5, "mm"),
-        legend.box.background = element_rect(linetype = "dotted", size = .8), 
+  labs(x = "", y = "Alpha diversity (Shannon H index)", fill = "") +
+  theme_tidy(legend = c(0.85,0.85)) +
+  scale_fill_manual(values = cols.fraction) +
+  theme(legend.box.background = element_rect(linetype = "longdash", linewidth = .4, fill = NA), 
         legend.margin = margin(0,2,2,0),
-        panel.border = element_rect(colour = "black", size = .75),
-        panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", size = 0.4))
+        panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.4))
 ```
 
 
 ```{r export alphadiv}
-ggsave(filename = "figures/adiv.pdf", width = 12, height = 10, units = c("cm"))
+ggsave(filename = "figures/adiv.pdf", width = 10, height = 10, units = c("cm"))
 ```
 
 
-#### NMDS cultures ####
+### NMDS cultures ###
 
-```{r run nmds, results='hide'}
+```{r nmds unfiltered}
 set.seed(999)
-nmds1 <- seqtab %>% # Full size fraction
+nmds <- seqtab %>% # Full size fraction
   inner_join(smd, by = "sample") %>%
   filter(fraction == "unfiltered" | is.na(fraction)) %>%
-  filter(groundwater %in% c("SA1420","KR0015","SA2600")) %>%
   group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
   select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
   column_to_rownames("sample") %>% vegan::metaMDS()
 
-nmds2 <- seqtab %>% # Small size fraction
-  inner_join(smd, by = "sample") %>%
-  filter(fraction == "filtered" | is.na(fraction)) %>%
-  filter(groundwater %in% c("SA1420","KR0015","SA2600")) %>%
-  group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
-  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
-  column_to_rownames("sample") %>% vegan::metaMDS()
-```
-
-Extract the scores
-
-```{r extract nmds coordinates unfiltered}
-vegan::scores(nmds1)$sites %>%
+vegan::scores(nmds)$sites %>%
   as.data.frame() %>%
   rownames_to_column("sample") %>%
   inner_join(smd, by = "sample") -> nmds.scores
@@ -162,7 +149,7 @@ vegan::scores(nmds1)$sites %>%
 Plot the ordination
 
 ```{r plot nmds unfiltered, include = T}
-nmds.scores %>%
+p1 <- nmds.scores %>%
   mutate(medium = if_else(medium == "env","Environmental","Culture")) %>%
   # Plot
   ggplot(aes(x = NMDS1, y = NMDS2)) +
@@ -170,26 +157,29 @@ nmds.scores %>%
   geom_hline(yintercept = 0, linetype = 'dotted') +
   # Points for samples, coloured by nature
   geom_point(aes(colour = groundwater, shape = medium), size = 3, stroke = 1) +
-  theme_tidy(fontsize = 7) +
-  scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = ""
-                    ) +
-  scale_color_manual(name = "Groundwater:",values = c(
-    "KR0015" = "#a6cee3","SA1420" = "#1f78b4","SA2600" = "#b2df8a")
-    ) +
+  theme_tidy() +
+  scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = "") +
+  scale_color_manual(values = cols.gw, name = "Groundwater") +
   annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
            label = paste('Stress = ', round(nmds1$stress, digits = 2)),
-           hjust = -0.1, vjust = -1, fontface = "bold",
+           hjust = -0.1, vjust = -1,
            ) +
   ggtitle("> 0.1 µm fraction") +
-  theme(plot.title = element_text(hjust = .5, size = 7, face = "bold"),
-        legend.title = element_text(size = 7, face = "bold"),
-        legend.position = "right"
-        ) -> p1
+  theme(
+    plot.title = element_text(hjust = .5, size = 7)
+    )
 ```
 
 
 ```{r extract nmds coordinates filtered}
-vegan::scores(nmds2)$sites %>%
+nmds <- seqtab %>% # Small size fraction
+  inner_join(smd, by = "sample") %>%
+  filter(fraction == "filtered" | is.na(fraction)) %>%
+  group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
+  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
+  column_to_rownames("sample") %>% vegan::metaMDS()
+
+vegan::scores(nmds)$sites %>%
   as.data.frame() %>%
   rownames_to_column("sample") %>%
   inner_join(smd, by = "sample") -> nmds.scores
@@ -197,7 +187,7 @@ vegan::scores(nmds2)$sites %>%
 
 
 ```{r plot nmds filtered}
-nmds.scores %>%
+p2 <- nmds.scores %>%
   mutate(medium = if_else(medium == "env","Environmental","Culture")) %>%
   # Plot
   ggplot(aes(x = NMDS1, y = NMDS2)) +
@@ -205,34 +195,34 @@ nmds.scores %>%
   geom_hline(yintercept = 0, linetype = 'dotted') +
   # Points for samples, coloured by nature
   geom_point(aes(colour = groundwater, shape = medium), size = 3, stroke = 1) +
-  theme_tidy(fontsize = 7) +
-  scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = ""
-                    ) +
-  scale_color_manual(name = "Groundwater:",values = c(
-    "KR0015" = "#a6cee3","SA1420" = "#1f78b4","SA2600" = "#b2df8a")
-    ) +
+  theme_tidy() +
+  scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = "") +
+  scale_color_manual(values = cols.gw, name = "Groundwater") +
   annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
-           label = paste('Stress = ', round(nmds2$stress, digits = 2)),
-           hjust = -.1, vjust = -1, fontface = "bold",
+           label = paste('Stress = ', round(nmds$stress, digits = 2)),
+           hjust = -.1, vjust = -1,
            ) +
   ggtitle("0.1 - 0.45 µm fraction") +
-  theme(plot.title = element_text(hjust = .5, size = 7, face = "bold"),
-        legend.title = element_text(size = 7, face = "bold"),
-        legend.position = "right"
-        ) -> p2
+  theme(plot.title = element_text(hjust = .5, size = 7),
+        axis.title.y = element_blank())
 ```
 
 
-```{r plot nmds patchwork}
+```{r plot nmds patchwork, fig.width = 16/2.53}
 library(patchwork)
-p1 + p2 + plot_layout(guides = "collect")
+p1 + p2 + plot_layout(guides = "collect") & 
+  theme(
+    legend.position = "right",
+    plot.background = element_blank())
 ```
 
 
 ```{r export patchwork ordination}
-ggsave(filename = "figures/nmds.pdf", width = 18, height = 10, units = c("cm"))
+ggsave(filename = "figures/nmds.pdf", width = 16, height = 10, units = c("cm"))
 ```
 
+
+### Microscopy ###
 
 ```{r load growth data}
 growth <- read_tsv("micro_cultures.tsv", col_types = cols(.default = col_character(), 
@@ -249,55 +239,48 @@ growth <- read_tsv("micro_cultures.tsv", col_types = cols(.default = col_charact
 # P26201_1067 KR0015 lysate filtered
 # P21015_1077 KR0015 srb    filtered
 
-growth %>% # KR0015
+p1 <- growth %>% # KR0015
   filter(sample %in% c("P26201_1058","P26201_1061",
                        "P26201_1067","P21015_1077")) %>%
   ggplot(aes(x = date, y = count)) +
-  geom_point(aes(colour = fraction), size = 1) +
-  geom_line(aes(group = sample, colour = fraction), size = 0.5) +
+  geom_hline(yintercept = 785565, linewidth = 6, alpha = 0.3) + # t0
+  geom_point(aes(colour = fraction)) +
+  geom_line(aes(group = sample, colour = fraction), linewidth = 0.5) +
   scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
                           as.Date("15-02-2022", format = "%d-%m-%Y"))) +
   scale_y_log10(limits = c(1e4,1e8),
-                breaks = c(1e4,1e5,785565,1e6,1e7),
-                labels = c(expression(bold("10"^"4")),
-                           expression(bold("10"^"5")),
-                           expression(bold("t"["0"])),
-                           expression(bold("10"^"6")),
-                           expression(bold("10"^"7")))
+                breaks = c(1e4,1e5,1e6,1e7),
+                labels = c(expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7"))
                 ) +
   scale_colour_manual(values = c("unfiltered" = "#a6cee3", "filtered" = "#1f78b4"),
                       labels = c("> 0.1 µm","0.1 - 0.45 µm")) +
-  labs(x = "", y = expression(bold(Cells~ml^{-1})), colour = "Fraction") +
-  theme_tidy(fontsize = 7) +
-  coord_cartesian(clip = "off") +
-  geom_hline(yintercept = 785565, size = 6, alpha = 0.3) + # t0
-  geom_hline(yintercept = 1e4, size = 0.4, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e5, size = 0.4, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e6, size = 0.4, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e7, size = 0.4, colour = "grey", linetype = "dotted") +
+  labs(x = "", y = expression("Cells [ml"^"-1"*"]"), colour = "Fraction") +
+  annotate(geom = "text", 
+           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
+           y = 785565, label = "t0", size = 6/.pt, hjust = 0) +
   annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
            y = 5810000, label = "SRB", size = 6/.pt, hjust = 0) +
   annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 19100000, label = "Lysate", size = 6/.pt, hjust = 0) +
+           y = 19100000, label = "Lys", size = 6/.pt, hjust = 0) +
     annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 183000, label = "Lysate", size = 6/.pt, hjust = 0) +
+           y = 183000, label = "Lys", size = 6/.pt, hjust = 0) +
     annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
            y = 67700, label = "SRB", size = 6/.pt, hjust = 0) +
   annotate(geom = "text",x = as.Date("2021-10-15"), y = Inf, 
-           label = "a: meteoric", fontface = "bold", size = 7/.pt, hjust = 0.1, vjust = 2) +
+           label = "a: meteoric", size = 7/.pt, hjust = 0.1, vjust = 2) +
+  theme_tidy() + 
   theme(
-    plot.margin = margin(0,2,0,0),
-    legend.position = "right",
-    legend.title = element_text(size = 7, face = "bold"),
-    axis.ticks.x = element_blank(),
-    axis.line.x = element_blank(),
-    axis.title.x = element_blank(),
-    panel.border = element_rect(colour = "black", size = .5),
-    ) -> p1
+    plot.margin = margin(0,0,0,0), 
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_line(linewidth = 0.4, linetype = "dotted", colour = "grey")
+    )
 ```
 
 
@@ -311,31 +294,18 @@ growth %>% # KR0015
 # P26201_1029 SA1420 lysate filtered
 # P26201_1027 SA1420 srb    filtered
 
-growth %>% # SA1420
+p2 <- growth %>% # SA1420
   filter(sample %in% c("P26201_1028","P26201_1026","P26201_1029","P26201_1027")) %>%
   ggplot(aes(x = date, y = count)) +
-  geom_point(aes(colour = fraction), size = 1) +
-  geom_line(aes(group = sample, colour = fraction), size = 0.5) +
+  geom_hline(yintercept = 66565, size = 5, alpha = 0.3) + # t0
+  geom_point(aes(colour = fraction)) +
+  geom_line(aes(group = sample, colour = fraction), linewidth = 0.5) +
   scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
                           as.Date("15-02-2022", format = "%d-%m-%Y"))) +
-  scale_y_log10(limits = c(1e4,1e8),
-                breaks = c(1e4,66565,1e5,1e6,1e7),
-                labels = c(expression(bold("10"^"4")),
-                           expression(bold("t"["0"])),
-                           expression(bold("10"^"5")),
-                           expression(bold("10"^"6")),
-                           expression(bold("10"^"7")))
-                ) +
-  labs(x = "", y = expression(bold(Cells~ml^{-1})), colour = "Fraction") +
-  theme_tidy(fontsize = 7) +
-  coord_cartesian(clip = "off") +
+  scale_y_log10(limits = c(1e4,1e8), breaks = c(1e4,1e5,1e6,1e7)) +
+  labs(x = "", y = expression(Cells~ml^{-1}), colour = "Fraction") +
   scale_colour_manual(values = c("unfiltered" = "#a6cee3", "filtered" = "#1f78b4"),
-                      labels = c("> 0.1 µm","0.1 - 0.45 µm")) +
-  geom_hline(yintercept = 66565, size = 5, alpha = 0.3) + # t0
-  geom_hline(yintercept = 1e4, colour = "grey", linetype = "dotted", size = 0.4) + # panel grid top
-  geom_hline(yintercept = 1e5, colour = "grey", linetype = "dotted", size = 0.4) + # panel grid top
-  geom_hline(yintercept = 1e6, colour = "grey", linetype = "dotted", size = 0.4) + # panel grid lower
-  geom_hline(yintercept = 1e7, colour = "grey", linetype = "dotted", size = 0.4) + # panel grid lower
+                      labels = c("> 0.1 µm","0.1 - 0.45 µm"), guide = "none") +
   annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
            y = 1800000, label = "Lysate", size = 6/.pt, hjust = 0) +
@@ -349,16 +319,13 @@ growth %>% # SA1420
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
            y = 64700, label = "Lysate", size = 6/.pt, hjust = 0) +
   annotate(geom = "text",x = as.Date("2021-10-15"), y = Inf, 
-           label = "b: marine", fontface = "bold", size = 7/.pt, vjust = 2, hjust = 0.1) +
-  theme(
-    plot.margin = margin(0,2,0,0),
-    legend.position = "right",
-    legend.title = element_text(size = 7, face = "bold"),
-    axis.ticks.x = element_blank(),
-    axis.title.x = element_blank(),
-    axis.line.x = element_blank(),
-    panel.border = element_rect(colour = "black", size = .5),
-    ) -> p2
+           label = "b: marine", size = 7/.pt, vjust = 2, hjust = 0.1) +
+  theme_tidy(legend = "none") +
+  theme(axis.text.y = element_blank(), plot.margin = margin(0,0,0,0),
+          axis.ticks.y = element_blank(),
+          axis.title.y = element_blank(),
+          panel.grid.major.y = element_line(linewidth = 0.4, linetype = "dotted", colour = "grey")
+        )
 ```
 
 
@@ -367,67 +334,59 @@ growth %>% # SA1420
 # P26201_1008 SA2600 srb unfiltered
 # P26201_1051 SA2600 t0
 
-growth %>% # SA2600
+p3 <- growth %>% # SA2600
   filter(sample %in% c("P26201_1008")) %>%
   ggplot(aes(x = date, y = count)) +
-  geom_point(aes(colour = fraction), size = 1) +
+  geom_hline(yintercept = 18550, size = 6, alpha = 0.3) + # t0
+  geom_point(aes(colour = fraction)) +
   geom_line(aes(group = sample, colour = fraction), size = 0.5) +
   scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
                           as.Date("15-02-2022", format = "%d-%m-%Y"))) +
-  scale_y_log10(limits = c(1e4,1e8),
-                breaks = c(1e4,18550,1e5,1e6,1e7),
-                labels = c(expression(bold("10"^"4")),
-                           expression(bold("t"["0"])),
-                           expression(bold("10"^"5")),
-                           expression(bold("10"^"6")),
-                           expression(bold("10"^"7"))
-                           )
-                ) +
+  scale_y_log10(limits = c(1e4,1e8), breaks = c(1e4,1e5,1e6,1e7)) +
   scale_colour_manual(values = c("unfiltered" = "#a6cee3", "filtered" = "#1f78b4"),
-                      labels = c("> 0.1 µm","0.1 - 0.45 µm")) +
-  labs(x = "", y = expression(bold(Cells~ml^{-1})), colour = "Fraction") +
-  theme_tidy(fontsize = 7) +
-  coord_cartesian(clip = "off") +
-  geom_hline(yintercept = 18550, size = 6, alpha = 0.3) + # t0
-  geom_hline(yintercept = 1e4, size = 0.4, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e5, size = 0.4, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e6, size = 0.4, colour = "grey", linetype = "dotted") +
-  geom_hline(yintercept = 1e7, size = 0.4, colour = "grey", linetype = "dotted") +
+                      labels = c("> 0.1 µm","0.1 - 0.45 µm"),
+                      guide = "none") +
+  labs(x = "", y = expression(Cells~ml^{-1}), colour = "Fraction") +
   annotate(geom = "text", 
            x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
            y = 221000, label = "SRB", size = 6/.pt, hjust = 0) +
+  annotate(geom = "text", 
+           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
+           y = 18550, label = "t0", size = 6/.pt, hjust = 0) +
   annotate(geom = "text",x = as.Date("2021-10-15"), y = Inf, 
-           label = "c: saline", fontface = "bold", size = 7/.pt, hjust = 0.1, vjust = 2) +
-  theme(
-    plot.margin = margin(0,0,0,0),
-    legend.position = "right",
-    legend.title = element_text(size = 7, face = "bold"),
-    axis.ticks.x = element_blank(),
-    axis.title.x = element_blank(),
-    axis.line.x = element_blank(),
-    panel.border = element_rect(colour = "black", size = .5),
-    ) -> p3
+           label = "c: saline", size = 7/.pt, hjust = 0.1, vjust = 2) +
+  theme_tidy(legend = "none") +
+  theme(axis.text.y = element_blank(), 
+        plot.margin = margin(0,0,0,0),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.grid.major.y = element_line(linewidth = 0.4, linetype = "dotted", colour = "grey")
+        )
 ```
 
 
-```{r plot growth patchwork, fig.width=18, fig.height=10}
+```{r plot growth patchwork, fig.width = 18/2.53}
 library(patchwork)
-p1 + p2 + p3 + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+p1 + p2 + p3 + plot_layout(guides = "collect") & theme(legend.position = "bottom", plot.background = element_blank())
 ```
 
 ```{r export growth}
-ggsave(filename = "figures/growth.png", width = 20, height = 8, units = c("cm"))
+ggsave(filename = "figures/growth.pdf", width = 18, height = 8, units = c("cm"))
 ```
 
+### QPCR KR0015 ###
 
-```{r plot qpcr}
+
+```{r data qpcr}
 read_tsv('data/qpcr.tsv', col_types = cols(.default = col_character(), 
                                       quantity = col_double(),
                                       age = col_factor(levels = seq(1:10) %>% as.character())
                                       )
          ) -> qpcr
+```
 
 
+```{r plot qpcr, fig.width = 6}
 qpcr %>%
   group_by(sample, Kingdom) %>% 
   summarise(mean = mean(quantity), sd = sd(quantity), .groups = 'drop') %>%
@@ -447,32 +406,30 @@ qpcr %>%
   geom_pointrange(aes(ymin = mean - sd, 
                       ymax = mean + sd), 
                   size = 0.2) +
-  labs(x = 'Week', y = expression(bold("16S rRNA gene copy number [ml"^"-1"*"]"))) +
-  coord_cartesian(clip = "off") +
+  labs(x = 'Week', y = expression("Gene copy number [ml"^"-1"*"]")) +
   scale_y_log10(breaks = c(1e3,1e4,1e5,1e6,1e7), 
-                labels = c(expression(bold("10"^"3")),
-                           expression(bold("10"^"4")),
-                           expression(bold("10"^"5")),
-                           expression(bold("10"^"6")),
-                           expression(bold("10"^"7"))
+                labels = c(expression("10"^"3"),
+                           expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7")
                            )
                 ) +
   scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate")) +
   scale_color_manual(name = "", values = c("Archaea" = "#a6cee3", "Bacteria" = "#1f78b4")) +
-  theme_tidy(fontsize = 7) +
-  theme(legend.position = 'right',
-        axis.ticks.length = unit(0.8, "mm"),
-        legend.title = element_text(size = 7, face = "bold"),
-        strip.text = element_text(face = "bold", size = 7),
-        panel.border = element_rect(colour = "black", size = 0.5),
-        panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", size = 0.5))
+  theme_tidy(legend = "right") +
+  theme(panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", size = 0.5),
+        axis.ticks.y = element_blank(),
+        strip.background = element_blank())
 ```
 
 
 ```{r export qpcr}
-ggsave(filename = "figures/qpcr.png", width = 16, height = 8, units = c("cm"))
+ggsave(filename = "figures/qpcr.pdf", width = 16, height = 8, units = c("cm"))
 ```
 
+
+### Areaplot KR0015 ###
 
 ```{r select most abundant asvs, message=FALSE, warning=FALSE}
 seqtab %>%
@@ -534,19 +491,19 @@ seqtab %>%
 
 ```{r export area plot}
 ggsave("figures/areaplot_phylum.pdf", height = 14, width = 16, units = "cm")
-ggsave("figures/areaplot_phylum.png", height = 14, width = 16, units = "cm")
 ```
 
 
-```{r plot environmental communities (t0)}
+```{r most abundant phyla (t0)}
 # Use the samples from P15009 and P21015 as t0
-i <- c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
-       "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
-       "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+t0 <- c(
+  "P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+  "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+  "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
        )
 
 seqtab %>%
-  filter(sample %in% i) %>%
+  filter(sample %in% t0) %>%
   inner_join(tax, by = "seqid") %>%
   group_by(phylum, sample) %>%
   # Sum the abundance of each phylum within a sample
@@ -554,128 +511,44 @@ seqtab %>%
   # Calculate the mean abundance of each phylum over the categories
   summarise(mean_relab = sum(relab), .groups = 'drop') %>%
   filter(!is.na(phylum)) %>%
-  top_n(10, mean_relab) -> t
+  top_n(8, mean_relab) -> t
 
 tax %>%
   left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
   mutate(topphylum = if_else(is.na(phylum), "Unidentified", topphylum)) %>%
   replace_na(list("topphylum" = "Other")) -> taxref
+```
 
+
+```{r plot environmental communities (t0), fig.width = 6}
 seqtab %>%
-  filter(sample %in% i) %>%
+  filter(sample %in% t0) %>%
   inner_join(taxref, by = "seqid") %>%
   # Summarize in order to have the sum for each category and topphylum
   group_by(sample, topphylum) %>% 
   summarise(mrelab = sum(relab), .groups = 'drop') %>%
   # Call the plot
-  ggplot(aes(x = fct_relevel(sample, i), 
-             y = mrelab*100, 
+  ggplot(aes(x = fct_relevel(sample, t0), 
+             y = mrelab * 100, 
              fill = fct_relevel(topphylum, c("Unidentified","Other")))) +
   labs(x = '', y = 'Relative abundance (%)', fill = "Phylum") +
-  geom_col() +
-  annotate(geom = "segment", x = 0.55, xend = 3.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 3.55, xend = 6.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 6.55, xend = 9.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 9.55, xend = 12.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -2, yend = -2) +
-  annotate(geom = "text", x = 2, y = -5, label = "KR0015", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 5, y = -5, label = "KR0015", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 8, y = -5, label = "SA1420", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 11, y = -5, label = "SA1420", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 14, y = -5, label = "SA2600", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 17, y = -5, label = "SA2600", size = 7/.pt, fontface = "bold") +
+  geom_col() + scale_y_continuous(expand = c(0.01,0)) +
+  annotate(geom = "segment", x = 0.55, xend = 6.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 6.55, xend = 12.45, y = -2, yend = -2) +
+  annotate(geom = "segment", x = 12.55, xend = 18.45, y = -2, yend = -2) +
+  annotate(geom = "text", x = 3.5, y = -5, label = "KR0015", size = 7/.pt) +
+  annotate(geom = "text", x = 9.5, y = -5, label = "SA1420", size = 7/.pt) +
+  annotate(geom = "text", x =15.5, y = -5, label = "SA2600", size = 7/.pt) +
   scale_fill_brewer(palette = 'Paired') +
-  theme_barplot(fontsize = 7) + 
-  theme(axis.ticks.y = element_line(),
-        axis.text.y = element_text(size = 7, face = "bold"),
-        axis.ticks.length.x = unit(0.5, "mm"),
+  theme_tidy(ratio = 0.7) + 
+  theme(axis.text.x = element_blank(), 
         axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        panel.border = element_rect(colour = "black", size = .75, fill = NA),
-        axis.title.x = element_blank(),
-        legend.position = "right",
-        legend.title = element_text(size = 7, face = "bold"),
-        legend.text = element_text(size = 7, color = "black"),
         legend.key.size = unit(4, "mm"))
 ```
 
 
 ```{r export t0 plot}
 ggsave("figures/t0_phylum.pdf", height = 10, width = 16, units = "cm")
-ggsave("figures/t0_phylum.png", height = 10, width = 16, units = "cm")
-```
-
-
-```{r t0 comparison among groundwaters temporal variation}
-# KR0015: P15009_1057, 1059 and 1060 + P21015_1020, 1021 and 1022
-# SA1420: P15009_1061, 1065 and 1066 + P21015_1023, 1024 and 1025
-# SA2600: P15009_1069, 1062 and 1063 + P21015_1029, 1030 and 1031
-# P15009 was sampled Oct 2019, P21015 was sampled Feb 2020, QK-1636 was sampled between Feb and May 2017
-# QK-1636 refers to the survey study, KR0015 not included in this study
-# QK1636-S58, S59 and S60 for SA1420, S40 + S41 and S42 for SA2600. 
-
-
-i <- c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
-       "QK1636-S58", "QK1636-S59", "QK1636-S60", # SA1420 survey
-       "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
-       "QK1636-S40", "QK1636-S41", "QK1636-S42", # SA2600 survey
-       "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
-       )
-
-
-seqtab %>%
-  inner_join(smd, by = "sample") %>%
-  filter(sample %in% i) %>%
-  inner_join(taxref, by = "seqid") %>%
-  # Summarize in order to have the sum for each category and topphylum
-  group_by(sample, topphylum) %>% 
-  summarise(mrelab = sum(relab), .groups = 'drop') %>%
-  # Call the plot
-  ggplot(aes(x = fct_relevel(sample, i), 
-             y = mrelab*100, 
-             fill = fct_relevel(topphylum, c("Unidentified","Other")))) +
-  labs(x = '', 
-       y = 'Relative abundance (%)', 
-       fill = "Phylum (GTDB-SBDI v207)",
-       caption = "i: sampling date Feb - May '17 as part of survey\nii: sampling date Oct '19 for cultures/feeding\niii: Feb '20 for Lawrence Berkeley National Laboratory") +
-  geom_col() +
-  annotate(geom = "segment", x = 0.55, xend = 3.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 3.55, xend = 6.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 6.55, xend = 9.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 9.55, xend = 12.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 18.55, xend = 21.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 21.55, xend = 24.45, y = -2, yend = -2) +
-  annotate(geom = "text", x = 2, y = -5, label = "KR0015 (ii)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 5, y = -5, label = "KR0015 (iii)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 8, y = -5, label = "SA1420 (i)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 11, y = -5, label = "SA1420 (ii)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 14, y = -5, label = "SA1420 (iii)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 17, y = -5, label = "SA2600 (i)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 20, y = -5, label = "SA2600 (ii)", size = 7/.pt, fontface = "bold") +
-  annotate(geom = "text", x = 23, y = -5, label = "SA2600 (iii)", size = 7/.pt, fontface = "bold") +
-  scale_fill_brewer(palette = 'Paired') +
-  theme_barplot(fontsize = 7) + 
-  theme(axis.ticks.y = element_line(),
-        axis.text.y = element_text(size = 7, face = "bold"),
-        axis.ticks.length.x = unit(0.5, "mm"),
-        axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
-        panel.border = element_rect(colour = "black", size = .75, fill = NA),
-        axis.title.x = element_blank(),
-        legend.position = "right",
-        plot.caption = element_text(size = 7, colour = "black", hjust = 0),
-        legend.title = element_text(size = 7, face = "bold"),
-        legend.text = element_text(size = 7, color = "black"),
-        legend.key.size = unit(4, "mm"))
-```
-
-
-```{r export t0 plot}
-ggsave("figures/temp_var_phylum.pdf", height = 12, width = 18, units = "cm")
-ggsave("figures/temp_var_phylum.png", height = 12, width = 18, units = "cm")
 ```
 
 
@@ -710,18 +583,18 @@ seqtab %>%
 ```
 ```{r export boxplot abundant taxa}
 ggsave("figures/boxplot_top.pdf", height = 10, width = 16, units = "cm")
-ggsave("figures/boxplot_top.png", height = 10, width = 16, units = "cm")
 ```
 
 
-```{r rda}
+```{r rda-metadata}
+# t0 are the environmental samples with n = 6 for each groundwater type
 t0 <- c(
   "P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
   "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
   "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
        )
 
-geochemistry <- list(
+geochemistry <- list( # Concentrations are in mg l-1
   groundwater = c("KR0015","SA1420","SA2600"),
   strontium = c(0.716,0.716,0.719),
   sulfate = c(60.3,314,630),
@@ -729,65 +602,19 @@ geochemistry <- list(
   ec = c(264,958,3550),
   doc = c(15.4,6.6,1.0),
   oxygen = c(-10.5,-7.45,-12.2),
-  nitrogen = c(0.25,1.82,0.08)
+  nitrogen = c(0.25,1.82,0.08),
+  sulfur = c(0.482,0.094,0),
+  s34 = c(27.4,30.0,13.1)
   ) %>% data.frame() %>%
   inner_join(smd[,c("sample","groundwater")], by = "groundwater")
+
+geochemistry <- seqtab %>% # Add the species richness for each sample
+  group_by(sample) %>% add_tally() %>% ungroup() %>%
+  select(sample, n) %>% distinct() %>% inner_join(geochemistry, by = "sample")
 ```
 
 
-```{r}
-set.seed(999)
-nmds <- seqtab %>%
-  filter(sample %in% i) %>%
-  select(sample, seqid, count) %>%
-  inner_join(geochemistry, by = "sample") %>%
-  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
-  column_to_rownames("sample") %>%
-  vegan::metaMDS(trymax = 20, k = 2, autotransform = T)
-
-vegan::scores(nmds)$sites %>%
-  as.data.frame() %>%
-  rownames_to_column("sample") %>%
-  inner_join(smd, by = "sample") -> nmds.scores
-```
-
-
-```{r}
-set.seed(123)
-
-k <- vegan::envfit(nmds, 
-                   geochemistry %>% filter(sample %in% i) %>% select(-ph,-nitrogen) %>% arrange(sample), 
-                   perm = 999)
-```
-
-```{r}
-k <- data.frame(scores(k, display = "vectors")) %>% rownames_to_column("species")
-
-ggplot(nmds.scores) +
-  geom_point(aes(x = NMDS1, y = NMDS2, colour = groundwater), size = 2) +
-  geom_segment(data = spp,
-               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
-               arrow = arrow(length = unit(0.3, "cm"))
-               ) +
-  geom_text(data = spp, 
-            aes(x = NMDS1*1.04, y = NMDS2*1.04, label = species), 
-            size = 7/.pt, colour = "black") +
-  stat_ellipse(aes(x = NMDS1, y = NMDS2, fill = groundwater), 
-               geom = "polygon", level = 0.9, alpha = 0.3, show.legend = F) +
-  scale_color_manual(name = "",values = cols.gw) +
-  scale_fill_manual(name = "",values = cols.gw, guide = "none") +
-  theme(aspect.ratio = 1, 
-        panel.grid = element_blank(),
-        axis.text = element_text(size = 7), 
-        axis.title = element_text(size = 7),
-        panel.border = element_rect(fill = NA),
-        panel.background = element_blank(),
-        legend.key = element_rect(fill = "transparent"),
-        legend.text = element_text(size = 7)
-        )
-```
-
-```{r rda}
+```{r rda-data}
 hellinger <- seqtab %>%
   filter(sample %in% t0) %>%
   # Standard Vegan transformation: Turn table with with samples as *rows*
@@ -798,26 +625,22 @@ hellinger <- seqtab %>%
   rownames_to_column("sample") %>%
   pivot_longer(-1, names_to = "seqid", values_to = "hellinger")
 
-m <- hellinger %>%
+m <- hellinger %>% # Create a matrix
   spread(seqid, hellinger) %>%
   column_to_rownames("sample")
 ```
 
 
-```{r}
+```{r rda}
 vegan::rda(
-  m ~ oxygen + doc,
+  m ~ oxygen + doc + s34, correlation = F,
   data = geochemistry %>%
     semi_join(hellinger, by = 'sample') %>%
     filter(sample %in% t0) %>%
     arrange(sample) %>%
     column_to_rownames('sample') 
 ) -> rda
-```
 
-
-```{r rda-plot, fig.width = 10}
-# I need to collect some temporary data sets for the plot
 # This one will contain the proportions explained which we get by dividing the
 # eigenvalue of each component with the sum of eigenvalues for all components.
 p <- c(rda$CCA$eig, rda$CA$eig)/sum(c(rda$CCA$eig, rda$CA$eig))
@@ -828,51 +651,42 @@ a <- rda$CCA$biplot %>% data.frame() %>% tibble::rownames_to_column('factor')
 # sulfate (RDA1, RDA2) = (0.95,0.31)
 # ec (1.0, 0.05)
 # nitrogen (-0.45, 0.89)
-a <- list(factor = c("sulfate","ec"),
-          RDA1 = c(0.95,1.0),
-          RDA2 = c(0.31,0.05)) %>% data.frame() %>% rbind(a)
-
-geochemistry <- seqtab %>% 
-  group_by(sample) %>% add_tally() %>% ungroup() %>%
-  select(sample, n) %>% distinct() %>% inner_join(geochemistry, by = "sample")
+# s34 (-0.95,0.28)
+a <- list(factor = c("s34"),
+          RDA1 = c(-0.96),
+          RDA2 = c( 0.29)) %>% data.frame() %>% rbind(a)
+```
 
 
+```{r rda-plot, fig.width = 10/2.53}
 rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
   inner_join(geochemistry, by = 'sample') %>%
   ggplot(aes(x = RDA1, y = RDA2)) +
   geom_vline(xintercept = 0, colour = "grey", linetype = "dotted") +
   geom_hline(yintercept = 0, colour = "grey", linetype = "dotted") +
-  geom_point(aes(colour = groundwater, size = n), shape = 1, stroke = 2) +
+  geom_point(aes(colour = groundwater, size = n), shape = 1, stroke = 1) +
   xlab(sprintf("RDA1 (%2.1f%% explained)", p[[1]] * 100)) +
   ylab(sprintf("RDA2 (%2.1f%% explained)", p[[2]] * 100)) +
   geom_segment(
     data = a, mapping = aes(xend = RDA1/4, yend = RDA2/4), 
-    x = 0, y = 0, arrow = arrow(length = unit(3, "mm"), type = "closed") 
+    x = 0, y = 0, arrow = arrow(length = unit(2, "mm"), type = "closed") 
     ) +
   geom_text(
     data = a, mapping = aes(x = RDA1/8, y = RDA2/8, label = factor), 
     size = 7/.pt
     ) + scale_size(range = c(1,8), name = "") +
-  annotate("text", x = -0.1, y =-0.25, label = "KR0015", colour = "#a6cee3", size = 8/.pt) +
-  annotate("text", x = 0.05, y = 0.28, label = "SA1420", colour = "#1f78b4", size = 8/.pt) +
-  annotate("text", x =  0.2, y =-0.05, label = "SA2600", colour = "#b2df8a", size = 8/.pt) +
+  annotate("text", x = -0.1, y =-0.25, label = "KR0015", colour = cols.gw[1], size = 7/.pt) +
+  annotate("text", x = 0.05, y = 0.28, label = "SA1420", colour = cols.gw[2], size = 7/.pt) +
+  annotate("text", x =  0.2, y =-0.05, label = "SA2600", colour = cols.gw[3], size = 7/.pt) +
   stat_ellipse(aes(x = RDA1, y = RDA2, colour = groundwater), 
                geom = "polygon", show.legend = F,
                fill = NA, linetype = "dashed") +
   scale_color_manual(name = "",values = cols.gw, guide = "none") +
   scale_fill_manual(name = "",values = cols.gw, guide = "none") +
-  theme(aspect.ratio = 1, 
-        panel.grid = element_blank(),
-        axis.text = element_text(size = 7, colour = "black"), 
-        axis.title = element_text(size = 7, colour = "black"),
-        panel.border = element_rect(fill = NA),
-        panel.background = element_blank(),
-        legend.position = "right", 
-        legend.key = element_rect(fill = "transparent")
-        )
+  theme_tidy(legend = "right")
 ```
 ```{r export rda}
-ggsave("figures/rda.pdf", height = 10, width = 14, units = "cm")
+ggsave("figures/rda.pdf", height = 10, width = 12, units = "cm")
 ```
 
 
