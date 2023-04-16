@@ -24,15 +24,7 @@ source("/Users/geweaa/Box Sync/Protocols/theme.R")
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, fig.path = "/figures")
 library(tidyverse)
-theme_set(theme_tidy())
 ```
-
-# KR0015: P15009_1057, 1059 and 1060 + P21015_1020, 1021 and 1022
-# SA1420: P15009_1061, 1065 and 1066 + P21015_1023, 1024 and 1025
-# SA2600: P15009_1069, 1062 and 1063 + P21015_1029, 1030 and 1031
-# P15009 was sampled Oct 2019, P21015 was sampled Feb 2020, QK-1636 was sampled between Feb and May 2017
-# QK-1636 refers to the survey study, KR0015 not included in this study
-# QK1636-S58, S59 and S60 for SA1420, S40 + S41 and S42 for SA2600. 
 
 
 ```{r files}
@@ -76,15 +68,58 @@ seqtab %>%
   select(sample,seqid,count,relab) -> seqtab
 ```
 
+```{r files metag}
+coverm <- data.frame() # Soon will contain 33 de-replicated genomes
+
+for (file in list.files("data", pattern = ".gz", full.names = TRUE)) {
+  name <- substr(file, 6, nchar(file)) %>% gsub("_L002_1.trim.fastq.gz", "", .)
+  i <- read_tsv(file, show_col_types = F) %>% rename(genome = 1, tpm = 2)
+  i <- i %>% mutate(sample = name) %>% filter(tpm > 0) %>% select(genome, sample, tpm)
+  coverm <- coverm %>% rbind(i)
+}
+
+# MEGAHIT-MaxBin2Refined-VK-3516-a1u_S32_L002.006 in taxonomy and checkm but not in coverm output
+bintax <- read_tsv("data/gtdbtk.summary.tsv", col_types = cols(.default = col_character())) %>% 
+  filter(genome %in% coverm$genome)
+checkm <- read_tsv("data/bin-stats-checkm.tsv", show_col_types = F) %>%
+  filter(genome %in% coverm$genome)
+```
+
 
 ```{r define colours}
-cols.gw <- c("KR0015" = "#b15928",
-             "SA1420" = "#1f78b4",
-             "SA2600" = "#33a02c")
+cols.gw <- c(
+  "KR0015" = "#D8B70A",
+  "SA1420" = "#A2A475",
+  "SA2600" = "#1B5331"
+  )
 
-cols.fraction <- c("Environmental" = "#d9d9d9",
-                   "0.1 - 0.45 µm" = "#1f78b4",
-                   "> 0.1 µm" = "#a6cee3")
+cols.fraction <- c(
+  "Environmental" = "#D8B70A",
+  "0.1 - 0.45 µm" = "#A2A475",
+  "> 0.1 µm" = "#1B5331"
+  )
+
+cols.mag <- c(
+  "Other" = "#899DA4",
+  "Nanoarchaeota" = "#046C9A",
+  "Patescibacteria" = "#C7B19C",
+  "Proteobacteria" = "#972D15",
+  "Desulfobacterota" = "#A2A475",
+  "Firmicutes" = "#02401B"
+  )
+
+cols.phylum <- c( # Sorted on abundance
+  "Patescibacteria" = "#C7B19C",
+  "Desulfobacterota" = "#A2A475",
+  "Caldatribacteriota" = "#972D15",
+  "Chloroflexota" = "#D69C4E",
+  "Acidobacteriota" = "#1B5331",
+  "Omnitrophota" = "#00A08A",
+  "Nitrospirota" = "#D8B70A",
+  "Campylobacterota" = "#FAEFD1",
+  "Other" = "#899DA4",
+  "Unidentified" = "#046C9A"
+)
 ```
 
 
@@ -113,19 +148,23 @@ adiv %>%
   replace_na(list("fraction" = "Environmental")) %>%
   ggplot(aes(x = fct_relevel(groundwater, c("KR0015","SA1420","SA2600")),
              y = shannon)) +
-  geom_boxplot(aes(fill = fct_relevel(fraction, c("Environmental"))), 
-               outlier.color = "white") +
+  geom_boxplot(aes(fill = fct_relevel(fraction, names(cols.fraction)), 
+                   colour = fraction), 
+               outlier.colour = "white", alpha = 0.5
+               ) +
   labs(x = "", y = "Alpha diversity (Shannon H index)", fill = "") +
-  theme_tidy(legend = c(0.85,0.85)) +
+  theme_tidy(legend = c(0.85,0.88)) +
   scale_fill_manual(values = cols.fraction) +
-  theme(legend.box.background = element_rect(linetype = "longdash", linewidth = .4, fill = NA), 
-        legend.margin = margin(0,2,2,0),
-        panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.4))
+  scale_colour_manual(values = cols.fraction, guide = "none") +
+  theme( 
+    legend.margin = margin(),
+    legend.background = element_rect(fill = "white"),
+    panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.4))
 ```
 
 
 ```{r export alphadiv}
-ggsave(filename = "figures/adiv.pdf", width = 10, height = 10, units = c("cm"))
+ggsave(filename = "figures/adiv.pdf", width = 10, height = 10, units = "cm")
 ```
 
 
@@ -161,7 +200,7 @@ p1 <- nmds.scores %>%
   scale_shape_manual(values = c("Culture" = 1, "Environmental" = 19), name = "") +
   scale_color_manual(values = cols.gw, name = "Groundwater") +
   annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
-           label = paste('Stress = ', round(nmds1$stress, digits = 2)),
+           label = paste('Stress = ', round(nmds$stress, digits = 2)),
            hjust = -0.1, vjust = -1,
            ) +
   ggtitle("> 0.1 µm fraction") +
@@ -208,7 +247,7 @@ p2 <- nmds.scores %>%
 ```
 
 
-```{r plot nmds patchwork, fig.width = 16/2.53}
+```{r plot nmds patchwork, fig.width = 14/2.54}
 library(patchwork)
 p1 + p2 + plot_layout(guides = "collect") & 
   theme(
@@ -218,36 +257,49 @@ p1 + p2 + plot_layout(guides = "collect") &
 
 
 ```{r export patchwork ordination}
-ggsave(filename = "figures/nmds.pdf", width = 16, height = 10, units = c("cm"))
+ggsave(filename = "figures/nmds.pdf", width = 16, height = 10, units = "cm")
 ```
 
 
 ### Microscopy ###
 
 ```{r load growth data}
-growth <- read_tsv("micro_cultures.tsv", col_types = cols(.default = col_character(), 
+growth <- read_tsv("data/micro_cultures.tsv", col_types = cols(.default = col_character(), 
                                                   count = col_integer(),
                                                   date = col_date(format = "%d-%m-%Y"))
-                   )
+                   ) %>%
+  mutate(week = case_when(
+    date == "2021-10-15" ~  1,
+    date == "2021-11-11" ~  5,
+    date == "2021-11-25" ~  7,
+    date == "2021-12-09" ~  9,
+    date == "2021-12-30" ~ 12,
+    date == "2022-01-18" ~ 15,
+    date == "2022-02-03" ~ 17
+  )) %>%
+  filter(!sample %in% c("P26201_1051","P26201_1024")) %>%
+  mutate(label = case_when(
+    groundwater == "KR0015" ~  "a: meteoric",
+    groundwater == "SA1420" ~  "b: marine",
+    groundwater == "SA2600" ~  "c: saline"
+  ))
 ```
 
-
-```{r growth plot meteoric}
+```{r}
 # Microscopy counts on KR0015 groundwater in duplicates, obtaining 680,220 and 890,910 cells ml-1.
-# P26201_1058 KR0015 lysate unfiltered
-# P26201_1061 KR0015 srb    unfiltered
-# P26201_1067 KR0015 lysate filtered
-# P21015_1077 KR0015 srb    filtered
+# Microscopy counts on SA1420 groundwater in duplicates, obtaining 59220 and 73910 cells ml-1.
+# For SA2600, this number was 14,100 and 23,000 cells ml-1
 
-p1 <- growth %>% # KR0015
-  filter(sample %in% c("P26201_1058","P26201_1061",
-                       "P26201_1067","P21015_1077")) %>%
-  ggplot(aes(x = date, y = count)) +
-  geom_hline(yintercept = 785565, linewidth = 6, alpha = 0.3) + # t0
-  geom_point(aes(colour = fraction)) +
-  geom_line(aes(group = sample, colour = fraction), linewidth = 0.5) +
-  scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
-                          as.Date("15-02-2022", format = "%d-%m-%Y"))) +
+p1 <- growth %>% filter(groundwater == "KR0015") %>%
+  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
+  geom_text(aes(x = -Inf, y = Inf), 
+            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
+            check_overlap = TRUE) +
+  geom_point() +
+  geom_line(aes(linetype = medium)) +
+  geom_hline(yintercept = 785565, linewidth = 0.3) +
+  annotate("ribbon", x = c(-Inf, Inf), ymin = 636585, ymax = 934545, alpha = 0.4) +
+  # Add sd around the mean
   scale_y_log10(limits = c(1e4,1e8),
                 breaks = c(1e4,1e5,1e6,1e7),
                 labels = c(expression("10"^"4"),
@@ -255,123 +307,110 @@ p1 <- growth %>% # KR0015
                            expression("10"^"6"),
                            expression("10"^"7"))
                 ) +
-  scale_colour_manual(values = c("unfiltered" = "#a6cee3", "filtered" = "#1f78b4"),
-                      labels = c("> 0.1 µm","0.1 - 0.45 µm")) +
+  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
+  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
+                      labels = c("0.1 - 0.45 µm","> 0.1 µm")) +
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate")) +
   labs(x = "", y = expression("Cells [ml"^"-1"*"]"), colour = "Fraction") +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 785565, label = "t0", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 5810000, label = "SRB", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 19100000, label = "Lys", size = 6/.pt, hjust = 0) +
-    annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 183000, label = "Lys", size = 6/.pt, hjust = 0) +
-    annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 67700, label = "SRB", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text",x = as.Date("2021-10-15"), y = Inf, 
-           label = "a: meteoric", size = 7/.pt, hjust = 0.1, vjust = 2) +
-  theme_tidy() + 
+  theme_tidy(legend = "bottom") + 
   theme(
-    plot.margin = margin(0,0,0,0), 
+    panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.3),
+    plot.margin = margin(),
     axis.ticks.y = element_blank(),
-    panel.grid.major.y = element_line(linewidth = 0.4, linetype = "dotted", colour = "grey")
+    panel.border = element_blank(),
+    axis.line = element_line(linewidth = 0.4, colour = "black")
     )
 ```
 
 
-```{r growth plot marine}
+```{r}
 # Microscopy counts on SA1420 groundwater in duplicates, obtaining 59220 and 73910 cells ml-1.
-# For SA2600, this number was 14,100 and 23,000 cells ml-1
-# For KA3385, this number was similar; 12,800 and 16,300 cells ml-1 
-# Microscopy counts on KR0015 groundwater in duplicates, obtaining 680,220 and 890,910 cells ml-1.
-# P26201_1026 SA1420 srb    unfiltered
-# P26201_1028 SA1420 lysate unfiltered
-# P26201_1029 SA1420 lysate filtered
-# P26201_1027 SA1420 srb    filtered
 
-p2 <- growth %>% # SA1420
-  filter(sample %in% c("P26201_1028","P26201_1026","P26201_1029","P26201_1027")) %>%
-  ggplot(aes(x = date, y = count)) +
-  geom_hline(yintercept = 66565, size = 5, alpha = 0.3) + # t0
-  geom_point(aes(colour = fraction)) +
-  geom_line(aes(group = sample, colour = fraction), linewidth = 0.5) +
-  scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
-                          as.Date("15-02-2022", format = "%d-%m-%Y"))) +
-  scale_y_log10(limits = c(1e4,1e8), breaks = c(1e4,1e5,1e6,1e7)) +
-  labs(x = "", y = expression(Cells~ml^{-1}), colour = "Fraction") +
-  scale_colour_manual(values = c("unfiltered" = "#a6cee3", "filtered" = "#1f78b4"),
-                      labels = c("> 0.1 µm","0.1 - 0.45 µm"), guide = "none") +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 1800000, label = "Lysate", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 601000, label = "SRB", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 92800, label = "SRB", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 64700, label = "Lysate", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text",x = as.Date("2021-10-15"), y = Inf, 
-           label = "b: marine", size = 7/.pt, vjust = 2, hjust = 0.1) +
-  theme_tidy(legend = "none") +
-  theme(axis.text.y = element_blank(), plot.margin = margin(0,0,0,0),
-          axis.ticks.y = element_blank(),
-          axis.title.y = element_blank(),
-          panel.grid.major.y = element_line(linewidth = 0.4, linetype = "dotted", colour = "grey")
-        )
-```
-
-
-```{r growth plot saline}
-# Microscopy counts on SA2600 groundwater in duplicates, obtaining 14,100 and 23,000 cells ml-1.
-# P26201_1008 SA2600 srb unfiltered
-# P26201_1051 SA2600 t0
-
-p3 <- growth %>% # SA2600
-  filter(sample %in% c("P26201_1008")) %>%
-  ggplot(aes(x = date, y = count)) +
-  geom_hline(yintercept = 18550, size = 6, alpha = 0.3) + # t0
-  geom_point(aes(colour = fraction)) +
-  geom_line(aes(group = sample, colour = fraction), size = 0.5) +
-  scale_x_date(limits = c(as.Date("15-10-2021", format = "%d-%m-%Y"),
-                          as.Date("15-02-2022", format = "%d-%m-%Y"))) +
-  scale_y_log10(limits = c(1e4,1e8), breaks = c(1e4,1e5,1e6,1e7)) +
-  scale_colour_manual(values = c("unfiltered" = "#a6cee3", "filtered" = "#1f78b4"),
-                      labels = c("> 0.1 µm","0.1 - 0.45 µm"),
+p2 <- growth %>% filter(groundwater == "SA1420") %>%
+  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
+  geom_text(aes(x = -Inf, y = Inf), 
+            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
+            check_overlap = TRUE) +
+  geom_point() +
+  geom_line(aes(linetype = medium)) +
+  geom_hline(yintercept = 66565, linewidth = 0.3) +
+  annotate("ribbon", x = c(-Inf, Inf), ymin = 56178, ymax = 76952, alpha = 0.4) +
+  # Add sd around the mean
+  scale_y_log10(limits = c(1e4,1e8),
+                breaks = c(1e4,1e5,1e6,1e7),
+                labels = c(expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7"))
+                ) +
+  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
+  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
+                      labels = c("0.1 - 0.45 µm","> 0.1 µm"),
                       guide = "none") +
-  labs(x = "", y = expression(Cells~ml^{-1}), colour = "Fraction") +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 221000, label = "SRB", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text", 
-           x = as.Date("2022-02-06", format = "%Y-%m-%d"), 
-           y = 18550, label = "t0", size = 6/.pt, hjust = 0) +
-  annotate(geom = "text",x = as.Date("2021-10-15"), y = Inf, 
-           label = "c: saline", size = 7/.pt, hjust = 0.1, vjust = 2) +
-  theme_tidy(legend = "none") +
-  theme(axis.text.y = element_blank(), 
-        plot.margin = margin(0,0,0,0),
-        axis.ticks.y = element_blank(),
-        axis.title.y = element_blank(),
-        panel.grid.major.y = element_line(linewidth = 0.4, linetype = "dotted", colour = "grey")
-        )
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate"), guide = "none") +
+  labs(x = "Week", y = "") +
+  theme_tidy(legend = "none") + 
+  theme(
+    panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.3),
+    plot.margin = margin(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.border = element_blank(),
+    axis.line = element_line(linewidth = 0.4, colour = "black")
+    )
 ```
 
 
-```{r plot growth patchwork, fig.width = 18/2.53}
+```{r}
+# For SA2600, this number was 14,100 and 23,000 cells ml-1
+
+p3 <- growth %>% filter(groundwater == "SA2600") %>%
+  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
+  geom_text(aes(x = -Inf, y = Inf), 
+            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
+            check_overlap = TRUE) +
+  geom_point() +
+  geom_line(aes(linetype = medium)) +
+  geom_hline(yintercept = 18550, linewidth = 0.3) +
+  annotate("ribbon", x = c(-Inf, Inf), ymin = 12257, ymax = 24843, alpha = 0.4) +
+  # Add sd around the mean
+  scale_y_log10(limits = c(1e4,1e8),
+                breaks = c(1e4,1e5,1e6,1e7),
+                labels = c(expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7"))
+                ) +
+  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
+  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
+                      labels = c("0.1 - 0.45 µm","> 0.1 µm"),
+                      guide = "none") +
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate"), guide = "none") +
+  labs(x = "Week", y = "") +
+  theme_tidy(legend = "none") + 
+  theme(
+    panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.3),
+    plot.margin = margin(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_blank(),
+    panel.border = element_blank(),
+    axis.line = element_line(linewidth = 0.4, colour = "black")
+    )
+```
+
+
+```{r}
 library(patchwork)
-p1 + p2 + p3 + plot_layout(guides = "collect") & theme(legend.position = "bottom", plot.background = element_blank())
+p1 + p2 + p3 + plot_layout(guides = "collect") & 
+  theme(
+    legend.position = "bottom",
+    plot.background = element_blank())
 ```
+
+
 
 ```{r export growth}
-ggsave(filename = "figures/growth.pdf", width = 18, height = 8, units = c("cm"))
+ggsave(filename = "figures/growth.pdf", width = 18, height = 8, units = "cm")
 ```
 
 ### QPCR KR0015 ###
@@ -382,11 +421,11 @@ read_tsv('data/qpcr.tsv', col_types = cols(.default = col_character(),
                                       quantity = col_double(),
                                       age = col_factor(levels = seq(1:10) %>% as.character())
                                       )
-         ) -> qpcr
+         ) %>% mutate(medium = gsub("ace","srm", medium)) -> qpcr
 ```
 
 
-```{r plot qpcr, fig.width = 6}
+```{r plot qpcr, fig.width = 12/2.54}
 qpcr %>%
   group_by(sample, Kingdom) %>% 
   summarise(mean = mean(quantity), sd = sd(quantity), .groups = 'drop') %>%
@@ -400,7 +439,9 @@ qpcr %>%
   ggplot(aes(x = fct_relevel(age, seq(1:10) %>% as.character), 
              y = mean, 
              group = category, 
-             colour = Kingdom)) +
+             colour = fct_relevel(Kingdom, c("Bacteria","Archaea"))
+             )
+         ) +
   geom_line(aes(linetype = medium)) +
   facet_wrap(~ fraction) +
   geom_pointrange(aes(ymin = mean - sd, 
@@ -416,16 +457,18 @@ qpcr %>%
                            )
                 ) +
   scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate")) +
-  scale_color_manual(name = "", values = c("Archaea" = "#a6cee3", "Bacteria" = "#1f78b4")) +
-  theme_tidy(legend = "right") +
-  theme(panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", size = 0.5),
+  scale_color_manual(name = "", values = c("Bacteria" = "#1B5331","Archaea" = "#A2A475")) +
+  theme_tidy(legend = "bottom") +
+  theme(panel.grid.major.y = element_line(colour = "grey", linetype = "dotted", linewidth = 0.5),
         axis.ticks.y = element_blank(),
+        plot.margin = margin(),
+        legend.box.margin = margin(),
         strip.background = element_blank())
 ```
 
 
 ```{r export qpcr}
-ggsave(filename = "figures/qpcr.pdf", width = 16, height = 8, units = c("cm"))
+ggsave(filename = "figures/qpcr.pdf", width = 12, height = 8, units = "cm")
 ```
 
 
@@ -493,6 +536,8 @@ seqtab %>%
 ggsave("figures/areaplot_phylum.pdf", height = 14, width = 16, units = "cm")
 ```
 
+### Overview community structure t0 ###
+
 
 ```{r most abundant phyla (t0)}
 # Use the samples from P15009 and P21015 as t0
@@ -520,7 +565,7 @@ tax %>%
 ```
 
 
-```{r plot environmental communities (t0), fig.width = 6}
+```{r plot environmental communities (t0), fig.width = 12/2.54}
 seqtab %>%
   filter(sample %in% t0) %>%
   inner_join(taxref, by = "seqid") %>%
@@ -530,25 +575,40 @@ seqtab %>%
   # Call the plot
   ggplot(aes(x = fct_relevel(sample, t0), 
              y = mrelab * 100, 
-             fill = fct_relevel(topphylum, c("Unidentified","Other")))) +
+             fill = fct_relevel(topphylum, names(cols.phylum))
+             )
+         ) +
   labs(x = '', y = 'Relative abundance (%)', fill = "Phylum") +
-  geom_col() + scale_y_continuous(expand = c(0.01,0)) +
-  annotate(geom = "segment", x = 0.55, xend = 6.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 6.55, xend = 12.45, y = -2, yend = -2) +
-  annotate(geom = "segment", x = 12.55, xend = 18.45, y = -2, yend = -2) +
-  annotate(geom = "text", x = 3.5, y = -5, label = "KR0015", size = 7/.pt) +
-  annotate(geom = "text", x = 9.5, y = -5, label = "SA1420", size = 7/.pt) +
-  annotate(geom = "text", x =15.5, y = -5, label = "SA2600", size = 7/.pt) +
-  scale_fill_brewer(palette = 'Paired') +
+  geom_col() + scale_y_continuous(expand = c(0.01,0), limits = c(-8,101)) +
+  annotate(geom = "segment", x =  0.55, xend =  3.45, y = -1, yend = -1) +
+  annotate(geom = "segment", x =  3.55, xend =  6.45, y = -1, yend = -1) +
+  annotate(geom = "segment", x =  6.55, xend =  9.45, y = -1, yend = -1) +
+  annotate(geom = "segment", x =  9.55, xend = 12.45, y = -1, yend = -1) +
+  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -1, yend = -1) +
+  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -1, yend = -1) +
+  # Labels dates
+  annotate(geom = "text", x =  2, y = -3, label = "Oct 2019", size = 7/.pt) +
+  annotate(geom = "text", x =  5, y = -3, label = "April 2020", size = 7/.pt) +
+  annotate(geom = "text", x =  8, y = -3, label = "Oct 2019", size = 7/.pt) +
+  annotate(geom = "text", x = 11, y = -3, label = "April 2020", size = 7/.pt) +
+  annotate(geom = "text", x = 14, y = -3, label = "Oct 2019", size = 7/.pt) +
+  annotate(geom = "text", x = 17, y = -3, label = "April 2020", size = 7/.pt) +
+  # Labels groundwater
+  annotate(geom = "text", x = 3.5, y = -7, label = "KR0015", size = 7/.pt) +
+  annotate(geom = "text", x = 9.5, y = -7, label = "SA1420", size = 7/.pt) +
+  annotate(geom = "text", x =15.5, y = -7, label = "SA2600", size = 7/.pt) +
+  scale_fill_manual(values = cols.phylum) +
   theme_tidy(ratio = 0.7) + 
   theme(axis.text.x = element_blank(), 
         axis.ticks.x = element_blank(),
-        legend.key.size = unit(4, "mm"))
+        legend.key.size = unit(3.5, "mm"),
+        legend.margin = margin()
+        )
 ```
 
 
 ```{r export t0 plot}
-ggsave("figures/t0_phylum.pdf", height = 10, width = 16, units = "cm")
+ggsave("figures/t0_phylum.pdf", height = 8, width = 14, units = "cm")
 ```
 
 
@@ -584,6 +644,9 @@ seqtab %>%
 ```{r export boxplot abundant taxa}
 ggsave("figures/boxplot_top.pdf", height = 10, width = 16, units = "cm")
 ```
+
+
+### Redundancy analysis ###
 
 
 ```{r rda-metadata}
@@ -628,6 +691,22 @@ hellinger <- seqtab %>%
 m <- hellinger %>% # Create a matrix
   spread(seqid, hellinger) %>%
   column_to_rownames("sample")
+
+hellinger <- seqtab %>%
+  inner_join(tax, by = "seqid") %>%
+  filter(sample %in% t0) %>%
+  group_by(phylum, sample) %>% summarise(count = sum(count), .groups = "drop") %>%
+  # Standard Vegan transformation: Turn table with with samples as *rows*
+  select(sample, phylum, count) %>%
+  spread(phylum, count, fill = 0) %>%
+  # Turn into a numeric matrix
+  column_to_rownames('sample') %>% vegan::decostand(method = "hellinger") %>%
+  rownames_to_column("sample") %>%
+  pivot_longer(-1, names_to = "phylum", values_to = "hellinger")
+
+m <- hellinger %>% # Create a matrix
+  spread(phylum, hellinger) %>%
+  column_to_rownames("sample")
 ```
 
 
@@ -648,6 +727,7 @@ p <- c(rda$CCA$eig, rda$CA$eig)/sum(c(rda$CCA$eig, rda$CA$eig))
 # factors in our model point in the coordinate
 a <- rda$CCA$biplot %>% data.frame() %>% tibble::rownames_to_column('factor')
 
+lab <- c("{}^34*S~'in'~SO[4]^{2-phantom()}", "delta^18*O", "Dissolved~organic~carbon") %>% cbind(a) %>% rename(label = 1) %>% select(-factor)
 # sulfate (RDA1, RDA2) = (0.95,0.31)
 # ec (1.0, 0.05)
 # nitrogen (-0.45, 0.89)
@@ -664,7 +744,7 @@ rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
   ggplot(aes(x = RDA1, y = RDA2)) +
   geom_vline(xintercept = 0, colour = "grey", linetype = "dotted") +
   geom_hline(yintercept = 0, colour = "grey", linetype = "dotted") +
-  geom_point(aes(colour = groundwater, size = n), shape = 1, stroke = 1) +
+  geom_point(aes(colour = groundwater), shape = 1, stroke = 1) +
   xlab(sprintf("RDA1 (%2.1f%% explained)", p[[1]] * 100)) +
   ylab(sprintf("RDA2 (%2.1f%% explained)", p[[2]] * 100)) +
   geom_segment(
@@ -672,9 +752,10 @@ rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
     x = 0, y = 0, arrow = arrow(length = unit(2, "mm"), type = "closed") 
     ) +
   geom_text(
-    data = a, mapping = aes(x = RDA1/8, y = RDA2/8, label = factor), 
-    size = 7/.pt
-    ) + scale_size(range = c(1,8), name = "") +
+    data = a, mapping = aes(x = RDA1/8, y = RDA2/8, label = lab$label),
+    size = 7/.pt, parse = TRUE
+    ) + 
+  scale_size(range = c(1,8), name = "") +
   annotate("text", x = -0.1, y =-0.25, label = "KR0015", colour = cols.gw[1], size = 7/.pt) +
   annotate("text", x = 0.05, y = 0.28, label = "SA1420", colour = cols.gw[2], size = 7/.pt) +
   annotate("text", x =  0.2, y =-0.05, label = "SA2600", colour = cols.gw[3], size = 7/.pt) +
@@ -683,11 +764,14 @@ rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
                fill = NA, linetype = "dashed") +
   scale_color_manual(name = "",values = cols.gw, guide = "none") +
   scale_fill_manual(name = "",values = cols.gw, guide = "none") +
-  theme_tidy(legend = "right")
+  theme_tidy(legend = "bottom")
 ```
 ```{r export rda}
-ggsave("figures/rda.pdf", height = 10, width = 12, units = "cm")
+ggsave("figures/rdax.pdf", height = 12, width = 10, units = "cm")
 ```
+
+
+### Rarefaction plus sampling site ###
 
 
 ```{r rarefaction}
@@ -737,3 +821,124 @@ vegan::rarecurve(seqtab_matrix,
 dev.off()
 ```
 
+
+```{r, fig.width = 8/2.53}
+# Äspö Lat N 57.4334, Lon E 16.6603) 
+baltic <- list.files("data/shapefiles/", pattern = ".shp", full.names = TRUE) %>% lapply(sf::st_read)
+
+ggplot() +
+  # Surrounding countries with alpha
+  geom_sf(data = baltic[[1]], aes(fill = var1), colour = "#f3e2d0", fill = "#f8efe4", alpha = 0.8) +
+  geom_sf(data = baltic[[2]], aes(fill = var1), colour = "#f3e2d0", fill = "#f8efe4", alpha = 0.8) +
+  geom_sf(data = baltic[[3]], aes(fill = var1), colour = "#f3e2d0", fill = "#f8efe4", alpha = 0.8) +
+  geom_sf(data = baltic[[4]], aes(fill = var1), colour = "#f3e2d0", fill = "#f8efe4", alpha = 0.8) +
+  geom_sf(data = baltic[[5]], aes(fill = var1), colour = "#f3e2d0", fill = "#f8efe4", alpha = 0.8) +
+  geom_sf(data = baltic[[6]], aes(fill = var1), colour = "#f3e2d0", fill = "#f8efe4", alpha = 0.8) +
+   # Sweden in full color
+  geom_sf(data = baltic[[7]], aes(fill = var1), colour = "#e3bc93", fill = "#f3e2d0") +
+  ggspatial::annotation_scale(location = "br", text_cex = 0.5) +
+  annotate("point", x = 16.6603, y = 57.4334, 
+           size = 3, stroke = 2, colour = "#c72b17", fill = "white", shape = 21
+           ) +
+  annotate("text", x = 15, y = 59.5, label = "Sweden", colour = "#b59675", size = 7/.pt) +
+  annotate("text", x = 18.5, y = 56.0, label = "Baltic Sea", colour = "#6f8b99", size = 7/.pt) +
+  lims(x = c(11,21), y = c(55,61)) + labs(x = "", y = "") + theme_tidy(ratio = NULL, fontsize = 6) +
+  theme(panel.background = element_rect(fill = "#bac7ce",linewidth = 0), 
+        panel.border = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(), 
+        axis.ticks = element_blank()
+        )
+```
+
+```{r export se-sweden}
+ggsave("figures/se-sweden-void.png", height = 6, width = 6, units = "cm")
+```
+
+
+### Stats metagenomes ###
+
+
+```{r}
+t <- c("Firmicutes","Desulfobacterota","Proteobacteria","Patescibacteria","Nanoarchaeota","Other")
+
+# Prepare data for plot
+i <- checkm %>%
+  inner_join(bintax, by = "genome") %>%
+  mutate(phylum = ifelse(phylum %in% t, phylum, "Other")) %>%
+  mutate(phylum = factor(phylum, levels = t)) %>%
+  select(genome, phylum, completeness, GC, genome.size, coding.density) %>%
+  distinct() %>%
+  mutate(genome.size = genome.size/1e6)
+```
+
+
+```{r plot bin stats, fig.width = 10/2.53}
+p1<- i %>%
+  ggplot(aes(genome.size, GC, color = phylum)) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#d9d9d9", se = TRUE, linewidth = 0.4) +
+  geom_point(size = 2.5, shape = 1, stroke = 1) + 
+  labs(x = "Estimated genome size (Mbp)", y = "GC content (%)", color = "") +
+  scale_colour_manual(values = cols.phylum.mag) +
+  theme_tidy() + scale_x_continuous(breaks = c(1,2,3,4,5,6)) +
+  annotate("text", x = Inf, y = -Inf, 
+           label = "paste(R ^ 2, \" = 0.40\")", 
+           size = 7/.pt, vjust = -0.5, hjust = 1, parse = TRUE) +
+  theme(
+    axis.line = element_line(linewidth = 0.4, color = "black"),
+    panel.border = element_blank()
+  )
+```
+
+
+```{r, fig.width = 2.54}
+p2 <- i %>%
+  ggplot(aes(phylum, completeness, group = phylum, 
+             fill = phylum, color = phylum)
+         ) +
+  geom_boxplot(alpha = 0.5, key_glyph = "rect") +
+  labs(x = "", y = "Completeness (%)", fill = "") +
+  scale_fill_manual(values = cols.phylum.mag, guide = "none") + 
+  scale_color_manual(values = cols.phylum.mag, guide = "none") +
+  theme_tidy(legend = "bottom", ratio = 1.4) +
+  theme(
+    axis.line = element_line(linewidth = 0.4, "black"),
+    panel.border = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_text(margin = margin()),
+    plot.margin = margin()
+  )
+```
+
+
+```{r, fig.width = 8/2.54}
+p3 <- i %>%
+  ggplot(aes(genome.size, coding.density, color = phylum)) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#d9d9d9", se = TRUE, linewidth = 0.4) +
+  geom_point(size = 2.5, shape = 1, stroke = 1) + 
+  labs(x = "Estimated genome size (Mbp)", y = "Coding density", color = "") +
+  scale_colour_manual(values = cols.phylum.mag, guide = "none") +
+  theme_tidy() + scale_x_continuous(breaks = c(1,2,3,4,5,6)) +
+  annotate("text", x = Inf, y = Inf, 
+           label = "paste(R ^ 2, \" = 0.20\")", 
+           size = 7/.pt, vjust = 1, hjust = 1, parse = TRUE) +
+  theme(
+    axis.line = element_line(linewidth = 0.4, color = "black"),
+    panel.border = element_blank()
+  )
+```
+
+
+```{r, fig.width = 18/2.54}
+library(patchwork)
+p1 + p2 + p3 + plot_layout(guides = "collect") &
+  theme(legend.position = "bottom",
+        axis.ticks.length = unit(".75", "mm"))
+```
+
+
+
+```{r export growth}
+ggsave(filename = "figures/binstats.pdf", width = 18, height = 10, units = "cm")
+```
