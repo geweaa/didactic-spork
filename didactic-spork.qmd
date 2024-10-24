@@ -1,0 +1,1446 @@
+---
+title: "didactic-spork (P26201 - cultures)"
+author: "George"
+date: '2022-07-12'
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: spacelab
+    highlight: textmate
+    df_print: paged
+    code_folding: hide
+    self_contained: false
+    keep_md: false
+    encoding: "UTF-8"
+---
+
+```{r themes}
+source("../../Protocols/theme.R")
+```
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+# Read files and assign colors
+
+```{r read amplicon files}
+seqtab <- read_tsv("data/ASV_table.tsv", col_types = cols(.default = col_character(), 
+                                    count = col_integer()
+                                    )) %>%
+  group_by(sample) %>% mutate(relab = count / sum(count)) %>% ungroup()
+
+# Use GTDB release R07-RS207 throughout the analysis (version 207)
+# Cite https://doi.org/10.17044/scilifelab.14869077.v4
+# P15009 (Sci-life contract id M.Dopson_19_05) was sampled for cultures and feeding experiment
+# P21015 (Sci-life contract id M.Dopson_21_01) was sampled for Lawrence Berkeley National Laboratory
+# P15009 was sampled Oct 2019, P21015 was sampled Feb 2020
+# P21015 samples 42 to 91 is from the bachelor project
+
+tax <- read_tsv("data/ASV_tax.tsv", col_types = cols(.default = col_character())
+                ) %>% 
+  mutate(phylum = gsub("_[A-Z]", "", phylum)) %>%
+  select(-kingdom, -confidence) %>%
+  mutate(taxon = coalesce(genus, family, order, class, phylum, domain)) %>%
+  mutate(phylum = case_when(
+    phylum == "Proteobacteria" ~ "Pseudomonadota",
+    phylum == "Caldatribacteriota" ~ "Atribacterota",
+    phylum == "Firmicutes" ~ "Bacillota",
+    .default = phylum
+  ))
+
+smd <- read_tsv("data/smd.tsv", col_types = cols(.default = col_character())
+                ) %>% 
+  filter(groundwater %in% c("KR0015","SA1420","SA2600")) %>%
+  select(-id,-yield) %>%
+  mutate(origin = case_when(
+    groundwater == "KR0015" ~ "Meteoric",
+    groundwater == "SA1420" ~ "Marine",
+    groundwater == "SA2600" ~ "Saline"
+  )) %>%
+  mutate(origin = factor(origin, levels = c("Meteoric","Marine","Saline"))) %>%
+  mutate(fraction = case_when(
+    fraction == "filtered" ~ "0.1 - 0.45 µm",
+    fraction == "unfiltered" ~ "All cells",
+    .default = "Environmental"
+  )) %>%
+  mutate(origin = case_when(
+    sample %in% c("P21015_1085", "P21015_1086") ~ "c.srb",
+    sample %in% c("P21015_1090", "P21015_1091") ~ "c.lys",
+    .default = origin
+  )) %>%
+  mutate(fraction = case_when(
+    sample %in% c("P21015_1085", "P21015_1086", "P21015_1090", "P21015_1091") ~ "control",
+    .default = fraction
+  ))
+
+# P21015_1085 and P21015_1086 are the control cultures for the SRB medium
+# P21015_1090 and P21015_1091 are the control cultures for the lysate medium
+```
+
+This project includes 15 metagenomes from 15 unique cultures
+
+```{r files metag}
+coverm <- data.frame() # Soon will contain 35 de-replicated genomes
+
+for (file in list.files("data/coverm", full.names = TRUE)) {
+  name <- substr(file, 13, nchar(file)) %>% gsub("_L002_1.trim.fastq.gz", "", .)
+  i <- read_tsv(file, show_col_types = F) %>% rename(genome = 1, tpm = 2)
+  i <- i %>% mutate(sample = name) %>% filter(tpm > 0) %>% select(genome, sample, tpm)
+  coverm <- coverm %>% rbind(i)
+}
+
+emapper <- data.frame()
+
+for (file in list.files("data/emapper", full.names = TRUE)) { # List all files in the emapper directory
+  name <- substr(file, 14, nchar(file)) %>% gsub(".emapper.annotations", "", .) # Extract the bin ref from the filename
+  i <- read_tsv(file, show_col_types = F, comment = "##") # Read the file
+  i <- i %>% rename(query = 1) %>% mutate(genome = name) %>% distinct() %>% select(genome, everything()) %>% mutate(KEGG_ko = gsub("ko:", "", KEGG_ko))
+  emapper <- emapper %>% rbind(i)
+}
+
+files <- list.files("data/prokka", full.names = TRUE, pattern = "tsv")
+prokka <- data.frame()
+for (file in files) {
+  name <- gsub("data/prokka/", "", file) %>% gsub(".tsv", "", .)
+  i <- read_tsv(file, show_col_types = F, comment = "##") %>%
+    mutate(genome = name) %>% distinct() %>% 
+    select(genome, everything()) %>% 
+    select(-locus_tag) %>% 
+    rename(ec = EC_number)
+  prokka <- prokka %>% rbind(i)
+}
+
+# Sample 35 (l7f) was removed from the binning process as this sample did not produce any bins
+bintax <- read_tsv("data/gtdbtk.summary.tsv", col_types = cols(.default = col_character())) %>% 
+  filter(genome %in% coverm$genome) %>%
+  mutate(phylum = case_when(
+    phylum == "Proteobacteria" ~ "Pseudomonadota",
+    phylum == "Caldatribacteriota" ~ "Atribacterota",
+    phylum == "Firmicutes" ~ "Bacillota",
+    .default = phylum
+  ))
+
+quality <- read_tsv("data/quality_report.tsv", show_col_types = F) %>%
+  rename_with(tolower) %>%
+  rename(genome = name) %>%
+  filter(genome %in% coverm$genome)
+```
+
+```{r define colours}
+cols.gw <- c(
+  "KR0015" = "#A2A475",
+  "SA1420" = "#899DA4",
+  "SA2600" = "#C7B19C"
+  )
+
+cols.origin <- c(
+  "Meteoric" = "#A2A475",
+  "Marine" = "#899DA4",
+  "Saline" = "#C7B19C"
+  )
+
+cols.fraction <- c(
+  "Environmental" = "#8D8680",
+  "0.1 - 0.45 µm" = "#A2A475",
+  "All cells" = "#C7B19C"
+  )
+
+cols.mag <- c(
+  "Other" = "#899DA4",
+  "Nanoarchaeota" = "#046C9A",
+  "Patescibacteria" = "#C7B19C",
+  "Pseudomonadota" = "#972D15",
+  "Desulfobacterota" = "#A2A475",
+  "Bacillota" = "#1B5331"
+  )
+
+cols.phylum <- c( # Sorted on abundance
+  "Patescibacteria" = "#C7B19C",
+  "Desulfobacterota" = "#A2A475",
+  "Atribacterota" = "#972D15",
+  "Chloroflexota" = "#D69C4E",
+  "Acidobacteriota" = "#FAEFD1",
+  "Omnitrophota" = "#00A08A",
+  "Nitrospirota" = "#D8B70A",
+  "Campylobacterota" = "#1B5331",
+  "Other" = "#899DA4",
+  "Unidentified" = "#046C9A"
+)
+```
+
+# 16S data groundwaters
+
+## Rarefaction 16S data
+
+```{r rarefaction: subsample the data}
+t0 <- c(
+  "P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+  "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+  "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+       )
+
+# Perform the subsampling
+rare <- seqtab %>%
+  # Remove negative control
+  filter(sample %in% t0) %>%
+  select(-relab) %>%
+  pivot_wider(names_from = "seqid", values_from = "count", values_fill = 0) %>%
+  column_to_rownames("sample") %>%
+  vegan::rarecurve(sample = 10000, step = 100, tidy = TRUE) %>%
+  tibble() %>%
+  rename_with(tolower)
+```
+
+```{r plot the rarefaction}
+rare %>%
+  inner_join(smd, by = c("site" = "sample")) %>%
+  # One sample has ~ 1 million reads 
+  filter(sample < 150000) %>%
+  ggplot(aes(sample, species, group = site, colour = origin)) + 
+  geom_line(linewidth = 0.75) +
+  scale_color_manual(values = cols.origin, name = "Groundwater") +
+  labs(x = "No. of sequenced reads", y = "Rarefied No. of ASVs") +
+  scale_x_continuous(labels = c("0", "50.000", "100.000", "150.000")) +
+  theme_tidy()
+```
+
+## Overview community structure t0
+
+```{r most abundant phyla (t0)}
+# Use the samples from P15009 and P21015 as t0
+t0 <- c(
+  "P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+  "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+  "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+       )
+
+t <- seqtab %>%
+  filter(sample %in% t0) %>%
+  inner_join(tax, by = "seqid") %>%
+  group_by(phylum, sample) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  filter(!is.na(phylum)) %>%
+  top_n(8, mean_relab)
+
+taxref <- tax %>%
+  left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
+  mutate(topphylum = if_else(is.na(phylum), "Unidentified", topphylum)) %>%
+  replace_na(list("topphylum" = "Other"))
+```
+
+```{r plot environmental communities (t0)}
+seqtab %>%
+  filter(sample %in% t0) %>%
+  inner_join(taxref, by = "seqid") %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(sample, topphylum) %>% 
+  summarise(mrelab = sum(relab), .groups = 'drop') %>%
+  # Call the plot
+  ggplot(aes(x = fct_relevel(sample, t0), 
+             y = mrelab * 100, 
+             fill = fct_relevel(topphylum, names(cols.phylum) %>% rev())
+             )
+         ) +
+  labs(x = '', y = 'Relative abundance (%)', fill = "Phylum") +
+  geom_col() + scale_y_continuous(expand = c(0.01,0), limits = c(-10,101)) +
+  annotate(geom = "segment", x =  0.55, xend =  3.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x =  3.55, xend =  6.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x =  6.55, xend =  9.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x =  9.55, xend = 12.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -1, yend = -1, linewidth = 0.5) +
+  # Labels dates
+  annotate(geom = "text", x =  2, y = -3.5, label = "Oct 2019", size = 7/.pt) +
+  annotate(geom = "text", x =  5, y = -3.5, label = "April 2020", size = 7/.pt) +
+  annotate(geom = "text", x =  8, y = -3.5, label = "Oct 2019", size = 7/.pt) +
+  annotate(geom = "text", x = 11, y = -3.5, label = "April 2020", size = 7/.pt) +
+  annotate(geom = "text", x = 14, y = -3.5, label = "Oct 2019", size = 7/.pt) +
+  annotate(geom = "text", x = 17, y = -3.5, label = "April 2020", size = 7/.pt) +
+  # Labels groundwater
+  annotate(geom = "text", x = 3.5, y = -8, label = "Meteoric", size = 7/.pt) +
+  annotate(geom = "text", x = 9.5, y = -8, label = "Marine", size = 7/.pt) +
+  annotate(geom = "text", x =15.5, y = -8, label = "Saline", size = 7/.pt) +
+  scale_fill_manual(values = cols.phylum) +
+  theme_tidy(ratio = 0.7) + 
+  theme(
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    legend.key.height = unit(3.5, "mm"),
+    legend.margin = margin(),
+    panel.border = element_rect(fill = "transparent", linewidth = 0.5)
+    )
+```
+
+```{r export t0 plot}
+ggsave("figures/t0_phylum.pdf", height = 8, width = 14, units = "cm")
+```
+
+## Redundancy analysis
+
+```{r rda-metadata}
+# t0 are the environmental samples with n = 6 for each groundwater type
+t0 <- c(
+  "P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+  "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+  "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+       )
+
+geochemistry <- list( # Concentrations are in mg l-1
+  groundwater = c("KR0015","SA1420","SA2600"),
+  strontium = c(0.716,0.716,0.719),
+  sulfate = c(60.3,314,630),
+  ph = c(7.4,7.5,7.5),
+  ec = c(264,958,3550),
+  doc = c(15.4,6.6,1.0),
+  oxygen = c(-10.5,-7.45,-12.2),
+  nitrogen = c(0.25,1.82,0.08),
+  sulfur = c(0.482,0.094,0),
+  s34 = c(27.4,30.0,13.1),
+  chloride = c(0.66,2.95,12.0)
+  ) %>% data.frame() %>%
+  inner_join(smd[,c("sample","groundwater")], by = "groundwater")
+
+geochemistry <- seqtab %>% # Add the species richness for each sample
+  group_by(sample) %>% add_tally() %>% ungroup() %>%
+  select(sample, n) %>% distinct() %>% 
+  inner_join(geochemistry, by = "sample") %>%
+  filter(sample %in% t0)
+```
+
+```{r rda-data}
+hellinger <- seqtab %>%
+  filter(sample %in% t0) %>%
+  # Standard Vegan transformation: Turn table with with samples as *rows*
+  select(sample, seqid, count) %>%
+  pivot_wider(names_from = "seqid", values_from = "count", values_fill = 0) %>%
+  # Turn into a numeric matrix
+  column_to_rownames('sample') %>% vegan::decostand(method = "hellinger") %>%
+  rownames_to_column("sample") %>%
+  pivot_longer(-1, names_to = "seqid", values_to = "hellinger")
+
+m <- hellinger %>% # Create a matrix
+  spread(seqid, hellinger) %>%
+  column_to_rownames("sample")
+```
+
+```{r rda}
+vegan::rda(
+  m ~ oxygen + doc + s34 + chloride + nitrogen, 
+  correlation = T,
+  data = geochemistry %>%
+    semi_join(hellinger, by = 'sample') %>%
+    filter(sample %in% t0) %>%
+    arrange(sample) %>%
+    column_to_rownames('sample') 
+) -> rda
+
+# This one will contain the proportions explained which we get by dividing the
+# eigenvalue of each component with the sum of eigenvalues for all components.
+p <- c(rda$CCA$eig, rda$CA$eig)/sum(c(rda$CCA$eig, rda$CA$eig))
+# This one is collecting the coordinates for arrows that will depict how the 
+# factors in our model point in the coordinate
+a <- rda$CCA$biplot %>% data.frame() %>% tibble::rownames_to_column('factor')
+
+lab <- c(
+  #"{}^34*S~'in'~SO[4]^{2-phantom()}", 
+  "delta^18*O", 
+  "DOC") %>% cbind(a) %>% rename(label = 1) %>% select(-factor)
+
+summary(rda)
+vegan::RsquareAdj(rda)
+```
+
+```{r rda-plot, fig.width = 12/2.53}
+p1 <- rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
+  inner_join(geochemistry, by = 'sample') %>%
+  ggplot(aes(x = RDA1, y = RDA2)) +
+  geom_vline(xintercept = 0, colour = "grey", linetype = "dotted") +
+  geom_hline(yintercept = 0, colour = "grey", linetype = "dotted") +
+  geom_point(aes(colour = groundwater, size = n), shape = 1, stroke = 0.5) +
+  xlab(sprintf("RDA1 (%2.1f%% explained)", p[[1]] * 100)) +
+  ylab(sprintf("RDA2 (%2.1f%% explained)", p[[2]] * 100)) +
+  geom_segment(
+    data = a, mapping = aes(xend = RDA1/4, yend = RDA2/4), linewidth = 0.3,
+    x = 0, y = 0, arrow = arrow(length = unit(2, "mm"), type = "closed") 
+    ) +
+  geom_label(
+    data = a, mapping = aes(x = RDA1/8, y = RDA2/8, label = lab$label),
+    size = 7/.pt, parse = TRUE, label.size = 0, label.padding = unit(0.1, "lines")
+    ) + 
+  scale_size(range = c(1,8), name = "No. of ASVs") +
+  annotate("text", x = -0.07, y =-0.3, label = "Meteoric", colour = cols.gw[1], size = 7/.pt) +
+  annotate("text", x = 0.06, y = 0.28, label = "Marine", colour = cols.gw[2], size = 7/.pt) +
+  annotate("text", x =  0.2, y = -0.05, label = "Saline", colour = cols.gw[3], size = 7/.pt) +
+  stat_ellipse(aes(x = RDA1, y = RDA2, colour = groundwater), 
+               geom = "polygon", show.legend = F,
+               fill = NA, linetype = "dashed") +
+  # Add R-squared
+  annotate("text", x = Inf, y = -Inf, 
+           label = "paste(R ^ 2, \" = 0.44\")", 
+           size = 7/.pt, vjust = -0.5, hjust = 1.05, parse = TRUE) +
+  scale_color_manual(name = "",values = cols.gw, guide = "none") +
+  scale_fill_manual(name = "",values = cols.gw, guide = "none") +
+  theme_tidy(legend = c(0.85,0.85)) +
+  theme(
+    legend.background = element_rect(fill = NA),
+    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
+    legend.text = element_text(margin = margin(r = 12, unit = "pt"))
+    )
+
+p1
+```
+
+```{r export rda}
+ggsave("figures/rdax.pdf", height = 8, width = 8, units = "cm")
+```
+
+## Network analysis: phylum
+
+```{r read network data}
+t <- c(
+  "Spirochaetota", "Acidobacteriota", "Atribacterota", "Chloroflexota",
+  "Omnitrophota", "Nanoarchaeota", "Campylobacterota", "Pseudomonadota"
+)
+
+network.survey <- read_tsv("data/network-survey.tsv", show_col_types = F)
+
+# Correlation between the abundance of the phyla using the cultures
+fit <- tibble("phylum" = t, "r.squared" = NA)
+for (i in t) {
+  model <- lm(relab ~ cpr, data = network.survey %>% filter(phylum == i)) %>% summary()
+  fit[fit$phylum == i, "r.squared"] <- model$adj.r.squared %>% round(digits = 2)
+}
+```
+
+```{r plot network environmental}
+p1 <- network.survey %>%
+  mutate(phylum = factor(phylum, levels = fit$phylum)) %>%
+  ggplot(aes(
+    x = sqrt(cpr * 100),
+    y = sqrt(relab * 100)
+  )) +
+  geom_point(shape = 21, stroke = 0.75, fill = "white") +
+  geom_text(data = fit %>% mutate(phylum = factor(phylum, levels = phylum)), 
+            aes(x = Inf, y = -Inf, label = paste("R^{2}:", r.squared)), 
+            size = 7/.pt, hjust = 1.1, vjust = -0.3, parse = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#D9D9D9", linewidth = 0.5) + 
+  labs(x = "", y = "Sqrt relative abundance (%)") +
+  theme_tidy() +
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x)) +
+  facet_wrap(~phylum, scales = "free", ncol = 4) +
+  theme(
+    strip.background = element_rect(fill = "#F0F0F0")
+  )
+
+p1
+```
+
+```{r prepare data for network}
+t <- c(
+  "Omnitrophota", "Chloroflexota", "Pseudomonadota", "Actinobacteriota",
+  "Verrucomicrobiota", "Acidobacteriota", "Bacillota", "Spirochaetota"
+)
+
+network <- seqtab %>%
+  inner_join(smd, by = "sample") %>% 
+  filter(fraction == "All cells") %>%
+  inner_join(tax, by = "seqid") %>% filter(phylum %in% t) %>%
+  group_by(sample, phylum) %>% summarise(relab = sum(relab), .groups = "drop") 
+
+network <- seqtab %>% 
+  inner_join(tax, by = "seqid") %>% filter(phylum == "Patescibacteria") %>%
+  group_by(sample, phylum) %>% summarise(cpr = sum(relab), .groups = "drop") %>% select(-phylum) %>%
+  inner_join(network, by = "sample")
+
+# Correlation between the abundance of the phyla using the cultures
+fit <- tibble("phylum" = t, "r.squared" = NA)
+for (i in t) {
+  model <- lm(relab ~ cpr, data = network %>% filter(phylum == i)) %>% summary()
+  fit[fit$phylum == i, "r.squared"] <- model$adj.r.squared %>% round(digits = 2)
+}
+
+```
+
+```{r plot network cultures}
+p2 <- network %>%
+  mutate(phylum = factor(phylum, levels = fit$phylum)) %>%
+  ggplot(aes(
+    x = sqrt(cpr * 100),
+    y = sqrt(relab * 100)
+  )) +
+  geom_point(shape = 21, stroke = 0.75, fill = "white") +
+  geom_text(data = fit %>% mutate(phylum = factor(phylum, levels = phylum)), 
+            aes(x = Inf, y = -Inf, label = paste("R^{2}:", r.squared)), 
+            size = 7/.pt, hjust = 1.1, vjust = -0.3, parse = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#D9D9D9", linewidth = 0.5) + 
+  labs(x = "", y = "Sqrt relative abundance (%)") +
+  theme_tidy() +
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x)) +
+  facet_wrap(~phylum, scales = "free", ncol = 4) +
+  theme(
+    strip.background = element_rect(fill = "#F0F0F0")
+  )
+
+p2
+```
+
+```{r plot network analysis with patchwork, fig.width=14/2.53, fig.height=16/2.53}
+library(patchwork)
+p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
+  panel.border = element_rect(fill = "transparent", linewidth = 0.5),
+  axis.ticks.length = unit(0.5, "mm"),
+  plot.margin = margin(),
+  plot.tag = element_text(size = 7),
+  plot.tag.position = c(0.035, 0.96)
+)
+```
+
+```{r export network analysis}
+ggsave("figures/network-phylum.pdf", width = 14, height = 16, units = "cm")
+```
+
+## Network analysis: order
+
+```{r lm on amplicons from groundwater}
+# The file survey-amplicons.tsv contains the ASVs from Äspö groundwaters published in https://doi.org/10.3389/fmicb.2018.02880
+survey.amplicons <- read_tsv("data/survey-amplicons.tsv", show_col_types = FALSE) %>%
+  group_by(sample) %>% mutate(relab = count / sum(count)) %>% ungroup()
+
+cpr <- survey.amplicons %>%
+  filter(phylum == "Patescibacteria") %>%
+  group_by(sample, order) %>% summarise(cpr = sum(relab), .groups = "drop") 
+
+network.survey <- survey.amplicons %>%
+  filter(phylum %in% t) %>%
+  group_by(sample, order) %>% summarise(relab = sum(relab), .groups = "drop") %>% 
+  # Add colum with abundance of CPR
+  left_join(cpr, by = "sample", relationship = "many-to-many") %>%
+  rename(order.clade = order.x, order.cpr = order.y)
+
+# The filter > 19 implies that the two orders have to co-occur at least ten times
+fit <- network.survey %>%
+  group_by(order.clade, order.cpr) %>% summarize(n = n(), .groups = "drop_last") %>% 
+  filter(n > 19) %>% ungroup() %>% na.omit()
+
+for (i in 1:nrow(fit)) {
+  data = network.survey %>% filter(order.clade == fit[i,]$order.clade & order.cpr == fit[i,]$order.cpr)
+  model <- lm(relab ~ cpr, data = data)
+  fit[i, "r.squared"] <- summary(model)$r.squared
+}
+
+fit <- fit %>% slice_max(r.squared, n = 10) %>%
+  mutate(clade = paste(order.clade, order.cpr))
+```
+
+```{r plot correlation order groundwater}
+p1 <- network.survey %>%
+  mutate(clade = paste(order.clade, order.cpr)) %>%
+  filter(clade %in% fit$clade) %>%
+  ggplot(aes(
+    x = sqrt(cpr * 100),
+    y = sqrt(relab * 100)
+  )) +
+  geom_point(shape = 21, stroke = 0.75, fill = "white") +
+  #geom_text(data = fit %>% mutate(phylum = factor(phylum, levels = phylum)), 
+  #          aes(x = Inf, y = -Inf, label = r.squared), 
+  #          size = 7/.pt, hjust = 1.1, vjust = -0.3, parse = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#D9D9D9", linewidth = 0.5) + 
+  labs(x = "", y = "Sqrt relative abundance (%)") +
+  theme_tidy() +
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x)) +
+  facet_wrap(~order.clade + order.cpr, scales = "free", ncol = 4) +
+  theme(
+    strip.background = element_rect(fill = "#F0F0F0")
+  )
+
+p1
+```
+
+```{r lm on amplicons from cultures}
+t <- c(
+  "Omnitrophota", "Chloroflexota", "Pseudomonadota", "Actinobacteriota",
+  "Verrucomicrobiota", "Acidobacteriota", "Bacillota", "Spirochaetota"
+)
+
+cpr <- seqtab %>%
+  inner_join(smd, by = "sample") %>% 
+  filter(fraction == "All cells") %>%
+  inner_join(tax, by = "seqid") %>% filter(phylum == "Patescibacteria") %>%
+  group_by(sample, order) %>% summarise(cpr = sum(relab), .groups = "drop") 
+
+network <- seqtab %>%
+  inner_join(smd, by = "sample") %>% 
+  filter(fraction == "All cells") %>%
+  inner_join(tax, by = "seqid") %>% filter(phylum %in% t) %>%
+  group_by(sample, order) %>% summarise(relab = sum(relab), .groups = "drop") %>% 
+  # Add colum with abundance of CPR
+  left_join(cpr, by = "sample", relationship = "many-to-many") %>%
+  rename(order.clade = order.x, order.cpr = order.y)
+
+# The filter > 19 implies that the two orders have to co-occur at least ten times
+fit <- network %>%
+  group_by(order.clade, order.cpr) %>% summarize(n = n(), .groups = "drop_last") %>% 
+  filter(n > 19) %>% ungroup() %>% na.omit()
+
+for (i in 1:nrow(fit)) {
+  data = network %>% filter(order.clade == fit[i,]$order.clade & order.cpr == fit[i,]$order.cpr)
+  model <- lm(relab ~ cpr, data = data)
+  fit[i, "r.squared"] <- summary(model)$adj.r.squared
+}
+fit <- fit %>% slice_max(r.squared, n = 12) %>%
+  mutate(clade = paste(order.clade, order.cpr)) %>%
+  mutate(r.squared = signif(.$r.squared, digits = 2)) %>%
+  arrange(desc(r.squared))
+```
+
+```{r plot correlation order cultures}
+p2 <- network %>%
+  mutate(clade = paste(order.clade, order.cpr)) %>%
+  filter(clade %in% fit$clade) %>%
+  mutate(clade = factor(clade, levels = fit$clade)) %>%
+  ggplot(aes(
+    x = sqrt(cpr * 100),
+    y = sqrt(relab * 100)
+  )) +
+  geom_point(shape = 21, stroke = 0.75, fill = "white") +
+  geom_text(data = fit %>% mutate(clade = factor(clade, levels = clade)), 
+            aes(x = Inf, y = -Inf, label = paste("R^{2}: ", r.squared)), 
+            size = 7/.pt, hjust = 1.1, vjust = -0.3, parse = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#D9D9D9", linewidth = 0.5) + 
+  labs(x = "", y = "Sqrt relative abundance (%)") +
+  theme_tidy() +
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x)) +
+  facet_wrap(~clade, scales = "free", ncol = 4) +
+  theme(
+    strip.background = element_rect(fill = "#F0F0F0")
+  )
+
+p2
+```
+
+# 16S data cultures
+
+## NMDS cultures three groundwaters
+
+```{r nmds unfiltered}
+set.seed(999)
+nmds <- seqtab %>% # Full size fraction
+  inner_join(smd, by = "sample") %>%
+  filter(!sample %in% paste("P21015_10", seq(42,81), sep = "")) %>% # Data from bachelor project
+  filter(fraction == "All cells" | fraction == "Environmental") %>%
+  group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
+  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
+  column_to_rownames("sample") %>% vegan::metaMDS()
+
+vegan::scores(nmds)$sites %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  inner_join(smd, by = "sample") -> nmds.scores
+```
+
+Plot the ordination
+
+```{r plot nmds unfiltered, include = T}
+p1 <- nmds.scores %>%
+  mutate(medium = if_else(medium == "env","Environmental","Culture")) %>%
+  # Plot
+  ggplot(aes(x = NMDS1, y = NMDS2
+             )) +
+  geom_vline(xintercept = 0, linetype = 'dotted') +
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  # Points for samples, coloured by origin
+  geom_point(aes(fill = origin,
+                 colour = origin,
+                 shape = medium,
+                 ), size = 3, stroke = 0.5) +
+  theme_tidy() +
+  scale_shape_manual(values = c("Culture" = 21, "Environmental" = 23), name = "") +
+  scale_fill_manual(values = alpha(cols.origin, alpha = 0.5), guide = "none") +
+  scale_colour_manual(values = cols.origin, guide = "none") +
+  annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
+           label = paste('Stress = ', round(nmds$stress, digits = 2)),
+           hjust = -0.1, vjust = -1,
+           ) +
+  ggtitle("All cells") +
+  #guides(fill=guide_legend(override.aes=list(shape=21))) +
+  theme(
+    plot.title = element_text(hjust = .5, size = 7)
+    )
+```
+
+```{r extract nmds coordinates filtered}
+nmds <- seqtab %>% # Small size fraction
+  inner_join(smd, by = "sample") %>%
+  filter(!sample %in% paste("P21015_10", seq(42,81), sep = "")) %>% # Data from bachelor project
+  filter(fraction == "0.1 - 0.45 µm" | fraction == "Environmental") %>%
+  group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
+  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
+  column_to_rownames("sample") %>% vegan::metaMDS()
+
+vegan::scores(nmds)$sites %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  inner_join(smd, by = "sample") -> nmds.scores
+```
+
+```{r plot nmds filtered}
+p2 <- nmds.scores %>%
+  mutate(medium = if_else(medium == "env","Environmental","Culture")) %>%
+  # Plot
+  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  geom_vline(xintercept = 0, linetype = 'dotted') +
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  # Points for samples, coloured by nature
+  geom_point(aes(
+    colour = origin,
+    fill = origin, 
+    shape = medium), size = 3, stroke = 0.5) +
+  theme_tidy() +
+  scale_shape_manual(values = c("Culture" = 21, "Environmental" = 23), name = "") +
+  scale_fill_manual(values = alpha(cols.origin, alpha = 0.5), guide = "none") +
+  scale_colour_manual(values = cols.origin, name = "Groundwater") +
+  annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
+           label = paste('Stress = ', round(nmds$stress, digits = 2)),
+           hjust = -.1, vjust = -1,
+           ) +
+  ggtitle("0.1 - 0.45 µm fraction") +
+  theme(plot.title = element_text(hjust = .5, size = 7),
+        axis.title.y = element_blank())
+```
+
+```{r plot nmds patchwork, fig.width = 14/2.54}
+library(patchwork)
+p1 + p2 + plot_layout(guides = "collect") & 
+  theme(
+    legend.position = "right",
+    plot.background = element_blank(),
+    legend.text = element_text(margin = margin()),
+    legend.box.margin = margin(l = -10),
+    plot.margin = margin(l = 4)
+    )
+```
+
+```{r export patchwork ordination}
+ggsave(filename = "figures/nmds.pdf", width = 14, height = 8, units = "cm")
+```
+
+## Diversity (alpha + beta) bachelor project (P21015)
+
+Estimate alpha diversity using the Shannon-Weaver index on species level
+
+```{r estimate alpha diversity}
+adiv <- seqtab %>%
+  select(-relab) %>%
+  spread(seqid, count, fill = 0) %>% 
+  column_to_rownames('sample') %>%
+  vegan::diversity() %>% as.data.frame() %>%
+  rownames_to_column('sample') %>%
+  rename(shannon = 2) %>%
+  inner_join(smd, by = "sample") 
+```
+
+```{r plot alpha diversity, fig.width = 10/2.53}
+p1 <- adiv %>%
+  ggplot(aes(
+    x = fct_relevel(origin, names(cols.origin)),
+    y = shannon
+    )) +
+  geom_boxplot(aes(fill = fct_relevel(fraction, names(cols.fraction))), 
+               outlier.colour = "white"
+               ) +
+  labs(x = "", y = "Alpha diversity (Shannon H index)", fill = "") +
+  theme_tidy(legend = c(0.8,0.88)) +
+  scale_fill_manual(values = cols.fraction) +
+  theme( 
+    legend.margin = margin(),
+    legend.background = element_rect(fill = "NA")
+  )
+
+p1
+```
+
+```{r nmds on amplicon data}
+seqtab %>%
+  filter(sample %in% paste("P21015_10", seq(42,81), sep = "") |
+           sample %in% c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022")
+           ) %>%
+  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
+  column_to_rownames("sample") %>%
+  vegan::metaMDS() -> nmds
+
+vegan::scores(nmds)$sites %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  inner_join(smd, by = "sample") -> nmds.scores
+```
+
+```{r plot nmds on amplicon data, fig.height=14/2.53}
+i <- read_tsv("data/baproject.weeks.tsv", col_types = cols(.default = col_character()))
+
+p2 <- nmds.scores %>%
+  left_join(i, by = "sample") %>%
+  mutate(fraction = gsub("Environmental","All cells", fraction)) %>%
+  ggplot(aes(NMDS1, NMDS2, 
+             color = fct_relevel(medium, c("ace","lys","env")), 
+             shape = fraction,
+             fill = medium
+             )
+         ) +
+  geom_vline(xintercept = 0, linetype = 'dotted') +
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  geom_point(size = 4.0, stroke = 0.5) + 
+  geom_text(aes(label = week), size = 7/.pt, color = "black", na.rm = TRUE) + 
+  scale_shape_manual(values = c("0.1 - 0.45 µm" = 21, "All cells" = 24), name = "Fraction", 
+                     labels = c("0.1 - 0.45 µm", "All cells")) +
+  scale_colour_manual(values = c('ace' = '#C7B19C', 'lys' = '#899DA4', env = "#8D8680"),
+                      labels = c("SRB","Lysate","Environmental")) +
+  scale_fill_manual(values = c('ace' = '#FFFFFF', 'lys' = '#FFFFFF', env = alpha("#8D8680", alpha = 0.5)), guide = "none") +
+  labs(color = "Medium") +
+  annotate('text', x = Inf, y = -Inf, size = 7/.pt, hjust = 1.05, vjust = -0.5, 
+           label = paste('Stress = ', round(nmds$stress, digits = 2))) +
+  theme_tidy(legend = "bottom") +
+  theme(
+    legend.box = "vertical",
+    legend.spacing.x = unit(0, "mm"),
+    legend.box.margin = margin(),
+    legend.margin = margin(),
+    legend.text = element_text(margin = margin(r = 12, unit = "pt")),
+    legend.key.spacing.x = unit(0, "mm")
+    )
+
+p2
+```
+
+```{r combine diversity plots amplicon data, fig.width=14/2.53, fig.height=10/2.53}
+library(patchwork)
+p1 + p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
+  legend.key.size = unit(4.5, "mm"),
+  legend.margin = margin(),
+  panel.border = element_rect(fill = "transparent", linewidth = 0.5),
+  plot.tag.position = c(0.12, 1.02)
+  )
+```
+
+```{r export diversity plots}
+ggsave("figures/diversity-baproject.pdf", width = 14, height = 9, units = "cm")
+```
+
+## Microscopy
+
+```{r load growth data}
+growth <- read_tsv("data/micro_cultures.tsv", col_types = cols(.default = col_character(), 
+                                                  count = col_integer(),
+                                                  date = col_date(format = "%d-%m-%Y"))
+                   ) %>%
+  mutate(week = case_when(
+    date == "2021-10-15" ~  1,
+    date == "2021-11-11" ~  5,
+    date == "2021-11-25" ~  7,
+    date == "2021-12-09" ~  9,
+    date == "2021-12-30" ~ 12,
+    date == "2022-01-18" ~ 15,
+    date == "2022-02-03" ~ 17
+  )) %>%
+  filter(!sample %in% c("P26201_1051","P26201_1024")) %>%
+  mutate(label = case_when(
+    groundwater == "KR0015" ~  "a: meteoric",
+    groundwater == "SA1420" ~  "b: marine",
+    groundwater == "SA2600" ~  "c: saline"
+  ))
+```
+
+```{r plot microscopy meteoric}
+# Microscopy counts on KR0015 groundwater in duplicates, obtaining 680,220 and 890,910 cells ml-1.
+# Microscopy counts on SA1420 groundwater in duplicates, obtaining 59220 and 73910 cells ml-1.
+# For SA2600, this number was 14,100 and 23,000 cells ml-1
+
+p1 <- growth %>% filter(groundwater == "KR0015") %>%
+  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
+  geom_text(aes(x = -Inf, y = Inf), 
+            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
+            check_overlap = TRUE) +
+  geom_point() +
+  geom_line(aes(linetype = medium)) +
+  geom_hline(yintercept = 785565, linewidth = 0.3) +
+  annotate("ribbon", x = c(-Inf, Inf), ymin = 636585, ymax = 934545, alpha = 0.4) +
+  # Add sd around the mean
+  scale_y_log10(limits = c(1e4,1e8),
+                breaks = c(1e4,1e5,1e6,1e7),
+                labels = c(expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7"))
+                ) +
+  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
+  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
+                      labels = c("0.1 - 0.45 µm","All cells")) +
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate")) +
+  labs(x = "", y = expression("Cell number (mL"^"-1"*")"), colour = "Fraction") +
+  theme_tidy(legend = "bottom") + 
+  theme(
+    plot.margin = margin(),
+    panel.border = element_blank(),
+    axis.line = element_line(linewidth = 0.5, colour = "black")
+    )
+
+p1
+```
+
+```{r plot microscopy marine}
+# Microscopy counts on SA1420 groundwater in duplicates, obtaining 59220 and 73910 cells ml-1.
+
+p2 <- growth %>% filter(groundwater == "SA1420") %>%
+  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
+  geom_text(aes(x = -Inf, y = Inf), 
+            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
+            check_overlap = TRUE) +
+  geom_point() +
+  geom_line(aes(linetype = medium)) +
+  geom_hline(yintercept = 66565, linewidth = 0.3) +
+  annotate("ribbon", x = c(-Inf, Inf), ymin = 56178, ymax = 76952, alpha = 0.4) +
+  # Add sd around the mean
+  scale_y_log10(limits = c(1e4,1e8),
+                breaks = c(1e4,1e5,1e6,1e7),
+                labels = c(expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7"))
+                ) +
+  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
+  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
+                      labels = c("0.1 - 0.45 µm","All cells"),
+                      guide = "none") +
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate"), guide = "none") +
+  labs(x = "Week", y = "") +
+  theme_tidy(legend = "none") + 
+  theme(
+    plot.margin = margin(),
+    #axis.ticks.y = element_blank(),
+    #axis.text.y = element_blank(),
+    panel.border = element_blank(),
+    axis.line = element_line(linewidth = 0.5, colour = "black")
+    )
+
+p2
+```
+
+```{r plot microscopy saline}
+# For SA2600, this number was 14,100 and 23,000 cells ml-1
+
+p3 <- growth %>% filter(groundwater == "SA2600") %>%
+  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
+  geom_text(aes(x = -Inf, y = Inf), 
+            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
+            check_overlap = TRUE) +
+  geom_point() +
+  geom_line(aes(linetype = medium)) +
+  geom_hline(yintercept = 18550, linewidth = 0.3) +
+  annotate("ribbon", x = c(-Inf, Inf), ymin = 12257, ymax = 24843, alpha = 0.4) +
+  # Add sd around the mean
+  scale_y_log10(limits = c(1e4,1e8),
+                breaks = c(1e4,1e5,1e6,1e7),
+                labels = c(expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7"))
+                ) +
+  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
+  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
+                      labels = c("0.1 - 0.45 µm","All cells"),
+                      guide = "none") +
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate"), guide = "none") +
+  labs(x = "Week", y = "") +
+  theme_tidy(legend = "none") + 
+  theme(
+    plot.margin = margin(),
+    #axis.ticks.y = element_blank(),
+    #axis.text.y = element_blank(),
+    panel.border = element_blank(),
+    axis.line = element_line(linewidth = 0.5, colour = "black")
+    )
+```
+
+```{r patchwork microscopy data}
+library(patchwork)
+p1 + p2 + p3 + plot_layout(guides = "collect") & 
+  theme(
+    legend.position = "bottom"
+    )
+```
+
+```{r export growth}
+ggsave(filename = "figures/growth.pdf", width = 18, height = 8, units = "cm")
+```
+
+## QPCR KR0015
+
+```{r read data qpcr}
+qpcr <- read_tsv('data/qpcr.tsv', col_types = cols(.default = col_character(), 
+                                      quantity = col_double(),
+                                      age = col_factor(levels = seq(1:10) %>% as.character())
+                                      )
+         ) %>% mutate(medium = gsub("ace","srm", medium))
+```
+
+```{r plot qpcr, fig.width = 12/2.54}
+qpcr %>%
+  group_by(sample, Kingdom) %>% 
+  summarise(mean = mean(quantity), sd = sd(quantity), .groups = 'drop') %>%
+  inner_join(smd, by = "sample") %>%
+  mutate(category = paste(medium, Kingdom)) %>%
+  # Call plot
+  ggplot(aes(x = fct_relevel(age, seq(1:10) %>% as.character), 
+             y = mean, 
+             group = category, 
+             colour = fct_relevel(Kingdom, c("Bacteria","Archaea"))
+             )
+         ) +
+  geom_line(aes(linetype = medium)) +
+  facet_wrap(~ fraction) +
+  geom_pointrange(aes(ymin = mean - sd, 
+                      ymax = mean + sd), 
+                  size = 0.2) +
+  labs(x = 'Week', y = expression("Gene copy number (mL"^"-1"*")")) +
+  scale_y_log10(breaks = c(1e3,1e4,1e5,1e6,1e7), 
+                labels = c(expression("10"^"3"),
+                           expression("10"^"4"),
+                           expression("10"^"5"),
+                           expression("10"^"6"),
+                           expression("10"^"7")
+                           )
+                ) +
+  scale_linetype(name = "Medium:", labels = c("SRB","Cell lysate")) +
+  scale_color_manual(name = "", values = c("Bacteria" = "#1B5331","Archaea" = "#A2A475")) +
+  theme_tidy(legend = "bottom") +
+  theme(
+    plot.margin = margin(),
+    legend.text = element_text(margin = margin(l = 0)),
+    axis.ticks.length = unit(0.5, "mm"),
+    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
+    strip.background = element_blank(),
+    legend.box.margin = margin(-8),
+    )
+```
+
+```{r export qpcr}
+ggsave(filename = "figures/qpcr.pdf", width = 12, height = 8, units = "cm")
+```
+
+## Areaplot KR0015
+
+```{r select most abundant asvs, message=FALSE, warning=FALSE}
+t <- seqtab %>%
+  filter(sample %in% paste("P21015", seq(1042,1081), sep = "_")
+           ) %>%
+  inner_join(tax, by = "seqid") %>%
+  group_by(phylum, sample) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  filter(!is.na(phylum)) %>%
+  top_n(9, mean_relab) %>% filter(phylum != "Bacteroidota")
+
+# The most abundant phyla, averaged over all cultures
+t %>% arrange(desc(mean_relab))
+```
+
+```{r add selection to taxonomy table, message=FALSE, warning=FALSE}
+taxref <- tax %>%
+  left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
+  replace_na(list("topphylum" = "Other"))
+
+cols.phylum <- c(
+  "Pseudomonadota" = "#972D15",
+  "Acidobacteriota" = "#FAEFD1",
+  "Spirochaetota" = "#D8B70A",
+  "Patescibacteria" = "#C7B19C",
+  "Desulfobacterota" = "#A2A475",
+  "Bacillota" = "#1B5331",
+  "Nanoarchaeota" = "#046C9A",
+  "Omnitrophota" = "#00A08A",
+  "Other" = "#899DA4"
+)
+```
+
+```{r areaplot P21015 phylum}
+seqtab %>%
+  filter(sample %in% paste("P21015", seq(1042,1081), sep = "_")
+           ) %>%
+  inner_join(taxref, by = "seqid") %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(sample, topphylum) %>% 
+  summarise(relab = sum(relab), .groups = 'drop') %>%
+  inner_join(smd, by = "sample") %>%
+  mutate(age = as.numeric(.$age)) %>% 
+  mutate(fraction = case_when(
+    fraction == "All cells" & medium == "ace" ~ "Simple C, all cells",
+    fraction == "All cells" & medium == "lys" ~ "Complex C, all cells",
+    fraction == "0.1 - 0.45 µm" & medium == "ace" ~ "Simple C, < 0.45 µm",
+    fraction == "0.1 - 0.45 µm" & medium == "lys" ~ "Complex C, < 0.45 µm"
+  )) %>%
+  mutate(topphylum = factor(topphylum, levels = rev(names(cols.phylum)))) %>%
+  # Call the plot
+  ggplot(aes(
+    age, 
+    relab * 100, 
+    fill = topphylum)) +
+  geom_col() + 
+  scale_x_continuous(n.breaks = 10) +
+  facet_wrap(~ fraction) +
+  labs(x = 'Week', y = 'Relative abundance (%)', fill = 'Phylum') +
+  scale_fill_manual(values = cols.phylum) + 
+  guides(fill = guide_legend(reverse = TRUE)) +
+  theme_tidy(ratio = 1.2) + 
+  theme(
+    panel.border = element_rect(fill = "transparent", linewidth = 0.5),
+    strip.background = element_blank(), 
+    legend.background = element_blank(),
+    legend.key.height = unit(4, "mm"),
+    plot.margin = margin(),
+    axis.ticks.length = unit(0.5, "mm")
+    )
+```
+
+```{r export area plot}
+ggsave("figures/areaplot_phylum.pdf", height = 12, width = 12, units = "cm")
+```
+
+# Genome-resolved metagenomics
+
+## Basic stats on the MAGs
+
+```{r prepare checkm data}
+t <- c("Bacillota","Desulfobacterota","Pseudomonadota","Patescibacteria","Nanoarchaeota","Other")
+
+# Prepare data for plot
+i <- quality %>%
+  inner_join(bintax, by = "genome") %>%
+  mutate(phylum = ifelse(phylum %in% t, phylum, "Other")) %>%
+  mutate(phylum = factor(phylum, levels = t)) %>%
+  select(genome, phylum, completeness, gc_content, genome_size, coding_density) %>%
+  distinct() %>%
+  mutate(genome.size = genome_size / 1e6)
+```
+
+```{r lm gc content and genome size}
+lm(gc_content ~ genome_size, data = quality) %>% summary()
+```
+
+```{r plot bin stats, fig.width = 10/2.53}
+p1 <- i %>%
+  ggplot(aes(
+    genome.size, 
+    gc_content, 
+    color = phylum,
+    fill = phylum
+    )) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#d9d9d9", se = TRUE, linewidth = 0.4) +
+  geom_point(size = 2.5, shape = 21, stroke = 0.5) + 
+  labs(x = "Estimated genome size (Mbp)", y = "Estimated GC content (%)", color = "") +
+  scale_colour_manual(values = cols.mag) +
+  scale_fill_manual(values = alpha(cols.mag, alpha = 0.5), guide = "none") +
+  theme_tidy() + 
+  scale_x_continuous(breaks = c(1,2,3,4,5,6)) +
+  annotate("text", x = Inf, y = -Inf, 
+           label = "paste(R ^ 2, \" = 0.41\")", 
+           size = 7/.pt, vjust = -0.5, hjust = 1, parse = TRUE) +
+  theme(
+    axis.line = element_line(),
+    panel.border = element_blank()
+  )
+
+p1
+```
+
+```{r plot completeness, fig.width=10/2.53}
+p2 <- i %>%
+  ggplot(aes(
+    phylum, 
+    completeness, 
+    group = phylum, 
+    fill = phylum, 
+    color = phylum
+    )) +
+  geom_boxplot(linewidth = 0.5, outlier.colour = "white") +
+  geom_jitter(width = 0.2, size = 2, shape = 21, stroke = 0.5) +
+  labs(x = "", y = "Estimated completeness (%)", fill = "") +
+  scale_fill_manual(values = alpha(cols.mag, alpha = 0.5), guide = "none") + 
+  scale_color_manual(values = cols.mag, guide = "none") +
+  theme_tidy(legend = "bottom") +
+  theme(
+    axis.line = element_line(),
+    panel.border = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_text(margin = margin()),
+    plot.margin = margin()
+  )
+
+p2
+```
+
+```{r lm coding density and genome size}
+lm(coding_density ~ genome_size, data = quality) %>% summary()
+```
+
+```{r plot size versus density, fig.width = 10/2.53}
+p3 <- i %>%
+  ggplot(aes(
+    genome.size, 
+    coding_density, 
+    color = phylum,
+    fill = phylum
+    )) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#d9d9d9", se = TRUE, linewidth = 0.4) +
+  geom_point(size = 2.5, shape = 21, stroke = 0.5) + 
+  labs(x = "Estimated genome size (Mbp)", y = "Estimated coding density", color = "") +
+  scale_colour_manual(values = cols.mag, guide = "none") +
+  scale_fill_manual(values = alpha(cols.mag, alpha = 0.5), guide = "none") +
+  theme_tidy() + 
+  scale_x_continuous(breaks = c(1,2,3,4,5,6)) +
+  scale_y_continuous(n.breaks = 7) +
+  annotate("text", x = Inf, y = Inf, 
+           label = "paste(R ^ 2, \" = 0.20\")", 
+           size = 7/.pt, vjust = 1, hjust = 1, parse = TRUE) +
+  theme(
+    axis.line = element_line(),
+    panel.border = element_blank()
+  )
+
+p3
+```
+
+```{r nmds on kos}
+nmds <- coverm %>%
+  # Sum the abundance of both coverage per metagenome
+  mutate(abundance = 1) %>% 
+  inner_join(emapper, by = "genome", relationship = "many-to-many") %>%
+  # Filter out NA and add multiple KOs on new line
+  filter(KEGG_ko != "-") %>% separate_rows(KEGG_ko, sep = ",") %>%
+  # Sum the abundance of each KO within the metagenomes
+  group_by(genome, KEGG_ko) %>% 
+  summarise(abundance = sum(abundance), .groups = "drop") %>%
+  # Pivot to prepare a numerical matrix
+  pivot_wider(names_from = "KEGG_ko", values_from = "abundance", values_fill = 0) %>%
+  column_to_rownames("genome") %>%
+  vegan::metaMDS()
+
+nmds.scores <- vegan::scores(nmds)$sites %>%
+  as.data.frame() %>%
+  rownames_to_column("genome")
+```
+
+```{r plot nmds kos, fig.width=10/2.53}
+p4 <- nmds.scores %>%
+  inner_join(bintax, by = "genome") %>%
+  mutate(phylum = ifelse(phylum %in% t, phylum, "Other")) %>%
+  # Plot
+  ggplot(aes(x = NMDS1, 
+             y = NMDS2, 
+             colour = fct_relevel(phylum,t),
+             fill = phylum
+             )) +
+  geom_vline(xintercept = 0, linetype = 'dotted', linewidth = 0.5) +
+  geom_hline(yintercept = 0, linetype = 'dotted', linewidth = 0.5) +
+  # Points for samples, coloured by nature
+  geom_point(size = 3, shape = 21, stroke = 0.5) +
+  theme_tidy() +
+  scale_color_manual(values = cols.mag, name = "Phylum", guide = "none") +
+  scale_fill_manual(values = alpha(cols.mag, alpha = 0.5), name = "", guide = "none") +
+  scale_y_continuous(breaks = c(-0.5, 0, 0.5)) + 
+  annotate('text', x = Inf, y = -Inf, size = 7/.pt,
+           label = paste('Stress = ', round(nmds$stress, digits = 2)),
+           hjust = 1.05, vjust = -0.5) +
+  theme(
+    axis.title.y = element_text(margin = margin()),
+    legend.spacing.x = unit(-0.5, "mm")
+    )
+
+p4
+```
+
+```{r patch the charateristics of the mags, fig.width = 14/2.53}
+library(patchwork)
+
+p1 + p2 + p3 + p4 + plot_layout(guides = "collect", nrow = 2) & plot_annotation(tag_levels = c("a", "b", "c", "d")) &
+  theme(
+    plot.tag = element_text(size = 7),
+    plot.tag.position = c(0.1, 1.03),
+    legend.position = "bottom",
+    axis.ticks.length = unit(".75", "mm"),
+    legend.box.margin = margin(),
+    legend.text = element_text(hjust = 0),
+    legend.key.size = unit("3", "mm")
+    )
+```
+
+```{r export fig on binstats}
+ggsave(filename = "figures/binstats.pdf", width = 12, height = 14, units = "cm")
+```
+
+## Metabolic weight
+
+```{r read data metabolic}
+samples <- coverm$sample %>% unique()
+
+mw <- data.frame()
+for (file in list.files("data/mw", full.names = TRUE)) {
+  name <- substr(file, 19, nchar(file)) %>% gsub(".txt", "", .)
+  name <- paste("S", name, sep = "")
+  name <- samples[grepl(name, samples)]
+  i <- read_tsv(file, show_col_types = F, comment = "##") %>% 
+    pivot_longer(3:ncol(.), names_to = "genome", values_to = "mw") %>%
+    mutate(sample = name) %>%
+    filter(mw > 0)
+  i <- i %>% rename(pathway = 1, mw.function = 2) %>% select(sample, genome, pathway, mw.function, mw) %>% mutate(pathway = substr(.$pathway, 8, nchar(.)))
+  mw <- mw %>% rbind(i)
+}
+```
+
+```{r metabolic - select pathways}
+i <- list(sample = c("VK-3516-l3u_S16", "VK-3516-l3u_S16"),
+          genome = c("MEGAHIT-MaxBin2Refined-VK-3516-KFM02a-3_S40_L002.026", "MEGAHIT-MetaBAT2Refined-VK-3516-KFM02a-3_S40_L002.49_sub"),
+          pathway = c("Organic carbon oxidation - complex carbon degradation", "Organic carbon oxidation - complex carbon degradation"), 
+          mw.function = c(0, 0), 
+          mw = c(0, 0))
+
+
+
+
+mw <- mw %>% 
+  # Some MAGs do not have any metabolic weight: assign a dummy
+  rbind(i) %>%
+  mutate(label = case_when(
+  pathway == "Organic carbon oxidation - complex carbon degradation" ~ "01: Org. C oxidation: complex C",
+  pathway == "Organic carbon oxidation - amino acid utilization" ~ "02: Org. C oxidation: AA utilization",
+  pathway == "Organic carbon oxidation - aromatics degradation" ~ "03: Org. C oxidation: aromatics",
+  pathway == "Carbon fixation - CBB cycle (Rubisco)" ~ "04: C fixation: CBB cycle",
+  pathway == "Carbon fixation - Reverse TCA cycle" ~ "05: C fixation: Reverse TCA",
+  pathway == "Carbon fixation - 3HP/4HB" ~ "06: C fixation: 3HP/4HB",
+  pathway == "Carbon fixation - Wood-Ljungdahl pathway" ~ "07: C fixation: Wood-Ljungdahl",
+  pathway == "Acetate oxidation" ~ "08: Acetate oxidation",
+  pathway == "Ethanol oxidation" ~ "09: Ethanol oxidation",
+  pathway == "Fermentation" ~ "10: Fermentation",
+  pathway == "Hydrogen generation" ~ "11: Hydrogen generation",
+  pathway == "Hydrogen oxidation" ~ "12: Hydrogen oxidation",
+  pathway == "N2 fixation - nifDK||vnfDKG||nifH" ~ "13: N2 fixation: nifDK, nifH",
+  pathway == "Nitrate reduction - napAB" ~ "13: Nitrate reduction: napAB",
+  pathway == "Nitrite ammonification - nirBD" ~ "14: Nitrite ammonification: nirBD",
+  pathway == "Nitrite ammonification - nrfADH" ~ "15: Nitrite ammonification: nrfADH",
+  pathway == "Sulfur oxidation - sdo" ~ "16: Sulfur oxidation: sdo",
+  pathway == "Sulfate reduction" ~ "17: Sulfate reduction",
+  pathway == "Sulfide oxidation - sqr" ~ "18: Sulfide oxidation: sqr",
+  .default = "19: Other"
+)) %>%
+  mutate(order = substr(label, 1, 2)) %>%
+  mutate(label = substr(label, 5, nchar(.))) %>%
+  arrange(order)   
+
+
+cols.phylum <- c(
+  "Desulfobacterota" = "#A2A475",
+  "Pseudomonadota" = "#972D15",
+  "Bacillota" = "#1B5331",
+  "Patescibacteria" = "#C7B19C",
+  "Nanoarchaeota" = "#00A08A",  
+  "Chloroflexota" = "#D69C4E",
+  "Spirochaetota" = "#D8B70A",
+  "Campylobacterota" = "#FAEFD1",
+  "Iainarchaeota" = "#046C9A"
+)
+```
+
+```{r phylum for metabolic weight}
+t <- c("Bacillota","Desulfobacterota","Pseudomonadota","Patescibacteria","Nanoarchaeota","Other")
+
+name <- bintax %>%
+  filter(phylum %in% names(cols.phylum)) %>%
+  mutate(phylum = factor(phylum, levels = names(cols.phylum))) %>%
+  arrange(phylum) %>%
+  pull(taxon) %>% unique()
+
+p1 <- bintax %>%
+  # Use subset of bins
+  filter(phylum %in% names(cols.phylum)) %>%
+  mutate(taxonomy = "Taxonomy") %>%
+  # Plot
+  ggplot(aes(fct_relevel(taxon, name), 
+             taxonomy, 
+             fill = fct_relevel(phylum, names(cols.phylum))
+             )) +
+  geom_tile(colour = "white") +
+  labs(x = "", y = "", fill = "") +
+  scale_fill_manual(values = cols.phylum) +
+  scale_x_discrete(position = "top") + 
+  theme_tidy(ratio = NULL) +
+  coord_equal() +
+  theme(
+    legend.key.height = unit(3, "mm"),
+    legend.key.width = unit(3, "mm"),
+    axis.ticks.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 0),
+    axis.text.y = element_blank(),
+    panel.border = element_rect(linewidth = 1,fill = NA)
+  )
+
+p1
+```
+
+```{r plot the metabolic weight}
+i <- mw %>%
+  filter(label != "Other") %>%
+  pull(label) %>% unique()
+
+p2 <- mw %>%
+  inner_join(bintax, by = "genome") %>% filter(phylum %in% names(cols.phylum)) %>%
+  # Order the genomes
+  mutate(taxon = factor(taxon, name)) %>%
+  # Order the pathways
+  mutate(label = factor(label, levels = rev(i))) %>%
+  # Filter out pathways
+  filter(!is.na(label)) %>%
+  # Plot
+  ggplot(aes(
+    taxon, 
+    label
+    )) +
+  geom_point(aes(size = mw), shape = 21, stroke = 0.5, fill = "white") +
+  theme_tidy() +
+  geom_vline(xintercept = 7.5, linewidth = 0.2) +
+  geom_vline(xintercept = 13.5, linewidth = 0.2) +
+  geom_vline(xintercept = 19.5, linewidth = 0.2) +
+  geom_vline(xintercept = 22.5, linewidth = 0.2) +
+  geom_vline(xintercept = 24.5, linewidth = 0.2) +
+  labs(x = "", y = "", size = "Metabolic\nweight score") +
+  theme(
+    legend.spacing.x = unit(0, "mm"),
+    legend.box.margin = margin(),
+    panel.border = element_rect(linewidth = 1, fill = NA),
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    panel.grid.major = element_blank()
+  )
+
+p2
+```
+
+```{r combine phylum and metabolic ouput}
+library(patchwork)
+
+p1 / p2 & theme(
+  legend.box.margin = margin(l = -8)
+  )
+```
+
+```{r export plot metabolic weight}
+ggsave("figures/metabolic.pdf", width = 18, height = 18, units = "cm")
+```
