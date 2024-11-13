@@ -50,6 +50,8 @@ smd <- read_tsv("data/smd.tsv", col_types = cols(.default = col_character()))
 This project includes 15 metagenomes from 15 unique cultures. The metagenomes contain 35 de-replicated metagenome-assembled genomes (MAG) that are affiliated with the Bacillota (7), Desulfobacterota (7), Pseudomonadota (6), Bacteroidota (4), Patescibacteria (3), Nanoarchaeota (2), Acidobacteriota (1), Campylobacterota (1), Chloroflexota (1), Iainarchaeota (1), Spirochaetota (1), and Verrucomicrobiota (1).
 
 
+![sampling-site](figures/äspö-mod.png){#fig-äspö}
+
 ```{r files metag}
 coverm <- data.frame() # Soon will contain 35 de-replicated genomes
 
@@ -251,15 +253,9 @@ p3 <- seqtab %>%
     legend.key.height = unit(3.5, "mm"),
     legend.margin = margin(t = -20),
     legend.text = element_text(margin = margin(l = 2)),
-    panel.border = element_rect(fill = "transparent", linewidth = 0.5),
+    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
     legend.key.spacing.y = unit(0, "mm")
     )
-
-p3
-```
-
-```{r export t0 plot}
-ggsave("figures/t0_phylum.pdf", height = 8, width = 14, units = "cm")
 ```
 
 ## Redundancy analysis
@@ -406,11 +402,9 @@ p2 + p3 & theme(plot.margin = margin(l = 4))
 ```
 
 ```{r}
-ggsave("figures/firsttry.pdf", width = 18, height = 10, units = "cm")
+ggsave("figures/fig-1.pdf", width = 18, height = 10, units = "cm")
 ```
 
-
-![sampling-site](figures/äspö-mod.png){#fig-äspö}
 
 
 ## Network analysis: phylum
@@ -519,9 +513,11 @@ p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
 )
 ```
 
+
 ```{r export network analysis}
 ggsave("figures/network-phylum.pdf", width = 14, height = 16, units = "cm")
 ```
+
 
 ## Network analysis: order
 
@@ -644,7 +640,7 @@ p2
 
 # 16S data cultures
 
-## NMDS cultures three groundwaters
+## NMDS cultures three groundwaters (supplemental)
 
 ```{r nmds unfiltered}
 set.seed(999)
@@ -747,6 +743,11 @@ p1 + p2 + plot_layout(guides = "collect") &
     )
 ```
 
+```{r}
+ggsave("figures/fig-s1.png", height = 9, width = 18, units = "cm")
+```
+
+
 
 ## Diversity (alpha + beta) bachelor project (P21015)
 
@@ -760,7 +761,12 @@ adiv <- seqtab %>%
   vegan::diversity() %>% as.data.frame() %>%
   rownames_to_column('sample') %>%
   rename(shannon = 2) %>%
-  inner_join(smd, by = "sample") 
+  inner_join(smd, by = "sample")
+
+adiv %>% filter(sample %in% t0) %>%
+  group_by(groundwater) %>% 
+  summarise(mean = round(mean(shannon), digits = 2), sd = round(sd(shannon), digits = 2), n = n()) %>%
+  knitr::kable()
 ```
 
 
@@ -782,25 +788,23 @@ p1 <- adiv %>%
     legend.background = element_rect(fill = "NA"),
     legend.position.inside = c(0.8,0.88)
   )
-
-p1
 ```
 
 ```{r nmds on amplicon data}
 set.seed(999)
 
-seqtab %>%
+nmds <- seqtab %>%
   filter(sample %in% paste("P21015_10", seq(42,81), sep = "") |
            sample %in% c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022")
            ) %>%
   select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
   column_to_rownames("sample") %>%
-  vegan::metaMDS() -> nmds
+  vegan::metaMDS()
 
-vegan::scores(nmds)$sites %>%
+nmds.scores <- vegan::scores(nmds)$sites %>%
   as.data.frame() %>%
   rownames_to_column("sample") %>%
-  inner_join(smd, by = "sample") -> nmds.scores
+  inner_join(smd, by = "sample")
 ```
 
 
@@ -822,7 +826,6 @@ p2 <- nmds.scores %>%
   scale_colour_manual(values = c('ace' = '#C7B19C', 'lys' = '#899DA4', env = "#8D8680"),
                       labels = c("Acetate","Lysate","Environmental")) +
   scale_fill_manual(values = c('ace' = '#FFFFFF', 'lys' = '#FFFFFF', env = alpha("#8D8680", alpha = 0.5)), guide = "none") +
-  labs(color = "Medium") +
   annotate('text', x = Inf, y = -Inf, size = 7/.pt, hjust = 1.05, vjust = -0.5, 
            label = paste('Stress = ', round(nmds$stress, digits = 2))) +
   theme_tidy(legend = "bottom") +
@@ -834,8 +837,6 @@ p2 <- nmds.scores %>%
     legend.text = element_text(margin = margin(l = 2, r = 8, unit = "pt")),
     legend.key.spacing.x = unit(0, "mm")
     )
-
-p2
 ```
 
 ```{r combine diversity plots amplicon data, fig.width=14/2.53, fig.height=10/2.53}
@@ -844,7 +845,7 @@ p1 + p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
   legend.key.size = unit(4.5, "mm"),
   legend.margin = margin(),
   panel.border = element_rect(fill = "transparent", linewidth = 0.5),
-  plot.tag.position = c(0.12, 1.02)
+  plot.tag.position = c(0.12, 1.05)
   )
 ```
 
@@ -870,28 +871,31 @@ growth <- read_tsv("data/micro_cultures.tsv", col_types = cols(.default = col_ch
   )) %>%
   filter(!sample %in% c("P26201_1051","P26201_1024")) %>%
   mutate(label = case_when(
-    groundwater == "KR0015" ~  "a: meteoric",
-    groundwater == "SA1420" ~  "b: marine",
-    groundwater == "SA2600" ~  "c: saline"
+    groundwater == "KR0015" ~  "Meteoric",
+    groundwater == "SA1420" ~  "Marine",
+    groundwater == "SA2600" ~  "Saline"
   ))
+
+counts <- tibble(
+  label = c("Meteoric","Meteoric","Marine","Marine","Saline","Saline"),
+  n = c(680220, 890910, 59220, 73910, 14100, 23000)
+) %>% group_by(label) %>% summarise(mean = mean(n), sd = sd(n))
 ```
 
 
 ```{r plot microscopy meteoric}
+#| fig-cap: Cell counts of enrichment cultures according to fluorescence microscopy. Each line represents the cell density of a single culture and the black horizontal line denotes the mean cell count of the groundwater at t0 (n = 2).
+#| label: fig-microscopy
+
 # Microscopy counts on KR0015 groundwater in duplicates, obtaining 680,220 and 890,910 cells ml-1.
 # Microscopy counts on SA1420 groundwater in duplicates, obtaining 59220 and 73910 cells ml-1.
 # For SA2600, this number was 14,100 and 23,000 cells ml-1
 
-p1 <- growth %>% filter(groundwater == "KR0015") %>%
-  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
-  geom_text(aes(x = -Inf, y = Inf), 
-            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
-            check_overlap = TRUE) +
+growth %>%
+  ggplot(aes(x = week, y = count, colour = fraction)) +
   geom_point() +
-  geom_line(aes(linetype = medium)) +
-  geom_hline(yintercept = 785565, linewidth = 0.3) +
-  annotate("ribbon", x = c(-Inf, Inf), ymin = 636585, ymax = 934545, alpha = 0.4) +
-  # Add sd around the mean
+  geom_line(aes(linetype = medium)) + facet_wrap(~ label, ncol = 3) +
+  geom_hline(data = counts, aes(yintercept = mean)) +
   scale_y_log10(limits = c(1e4,1e8),
                 breaks = c(1e4,1e5,1e6,1e7),
                 labels = c(expression("10"^"4"),
@@ -906,98 +910,15 @@ p1 <- growth %>% filter(groundwater == "KR0015") %>%
   labs(x = "", y = expression("Cell number (mL"^"-1"*")"), colour = "Fraction") +
   theme_tidy(legend = "bottom") + 
   theme(
+    legend.margin = margin(t = -10),
     plot.margin = margin(),
     panel.border = element_blank(),
     axis.line = element_line(linewidth = 0.5, colour = "black")
-    )
-
-p1
-```
-
-```{r plot microscopy marine}
-# Microscopy counts on SA1420 groundwater in duplicates, obtaining 59220 and 73910 cells ml-1.
-
-p2 <- growth %>% filter(groundwater == "SA1420") %>%
-  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
-  geom_text(aes(x = -Inf, y = Inf), 
-            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
-            check_overlap = TRUE) +
-  geom_point() +
-  geom_line(aes(linetype = medium)) +
-  geom_hline(yintercept = 66565, linewidth = 0.3) +
-  annotate("ribbon", x = c(-Inf, Inf), ymin = 56178, ymax = 76952, alpha = 0.4) +
-  # Add sd around the mean
-  scale_y_log10(limits = c(1e4,1e8),
-                breaks = c(1e4,1e5,1e6,1e7),
-                labels = c(expression("10"^"4"),
-                           expression("10"^"5"),
-                           expression("10"^"6"),
-                           expression("10"^"7"))
-                ) +
-  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
-  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
-                      labels = c("0.1 - 0.45 µm","All cells"),
-                      guide = "none") +
-  scale_linetype(name = "Medium:", labels = c("Acetate","Cell lysate"), guide = "none") +
-  labs(x = "Week", y = "") +
-  theme_tidy(legend = "none") + 
-  theme(
-    plot.margin = margin(),
-    #axis.ticks.y = element_blank(),
-    #axis.text.y = element_blank(),
-    panel.border = element_blank(),
-    axis.line = element_line(linewidth = 0.5, colour = "black")
-    )
-
-p2
-```
-
-```{r plot microscopy saline}
-# For SA2600, this number was 14,100 and 23,000 cells ml-1
-
-p3 <- growth %>% filter(groundwater == "SA2600") %>%
-  ggplot(aes(x = week, y = count, colour = fraction, label = label)) +
-  geom_text(aes(x = -Inf, y = Inf), 
-            size = 7/.pt, hjust = -0.2, vjust = 2, colour = "black",
-            check_overlap = TRUE) +
-  geom_point() +
-  geom_line(aes(linetype = medium)) +
-  geom_hline(yintercept = 18550, linewidth = 0.3) +
-  annotate("ribbon", x = c(-Inf, Inf), ymin = 12257, ymax = 24843, alpha = 0.4) +
-  # Add sd around the mean
-  scale_y_log10(limits = c(1e4,1e8),
-                breaks = c(1e4,1e5,1e6,1e7),
-                labels = c(expression("10"^"4"),
-                           expression("10"^"5"),
-                           expression("10"^"6"),
-                           expression("10"^"7"))
-                ) +
-  scale_x_continuous(breaks = c(1,3,5,7,9,11,13,15,17)) +
-  scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
-                      labels = c("0.1 - 0.45 µm","All cells"),
-                      guide = "none") +
-  scale_linetype(name = "Medium:", labels = c("Acetate","Cell lysate"), guide = "none") +
-  labs(x = "Week", y = "") +
-  theme_tidy(legend = "none") + 
-  theme(
-    plot.margin = margin(),
-    #axis.ticks.y = element_blank(),
-    #axis.text.y = element_blank(),
-    panel.border = element_blank(),
-    axis.line = element_line(linewidth = 0.5, colour = "black")
-    )
-```
-
-```{r patchwork microscopy data}
-library(patchwork)
-p1 + p2 + p3 + plot_layout(guides = "collect") & 
-  theme(
-    legend.position = "bottom"
     )
 ```
 
 ```{r export growth}
-ggsave(filename = "figures/growth.pdf", width = 18, height = 8, units = "cm")
+ggsave(filename = "figures/fig-s2.pdf", width = 18, height = 9, units = "cm")
 ```
 
 ## QPCR KR0015
@@ -1016,7 +937,6 @@ label <- c(
   'fractionated' = '0.1 - 0.45 µm fraction',
   'non-fractionated' = 'All cells'
 )
-
 
 qpcr %>%
   group_by(sample, Kingdom) %>% 
@@ -1058,7 +978,7 @@ qpcr %>%
 ```
 
 ```{r export qpcr}
-ggsave(filename = "figures/qpcr.pdf", width = 12, height = 8, units = "cm")
+ggsave(filename = "figures/fig-2.pdf", width = 12, height = 8, units = "cm")
 ```
 
 ## Areaplot KR0015
@@ -1122,24 +1042,26 @@ seqtab %>%
     fill = topphylum)) +
   geom_col() + 
   scale_x_continuous(n.breaks = 10) +
-  facet_wrap(~ fraction) +
-  labs(x = 'Week', y = 'Relative abundance (%)', fill = 'Phylum') +
+  facet_wrap(~ fraction, nrow = 1) +
+  labs(x = 'Week', y = 'Relative abundance (%)', fill = '') +
   scale_fill_manual(values = cols.phylum) + 
-  guides(fill = guide_legend(reverse = TRUE)) +
-  theme_tidy(ratio = 1.2) + 
+  guides(fill = guide_legend(reverse = TRUE, ncol = 3)) +
+  theme_tidy(ratio = 1.2, legend = "bottom") + 
   theme(
     panel.border = element_rect(fill = "transparent", linewidth = 0.5),
     strip.background = element_blank(), 
     legend.background = element_blank(),
     legend.key.height = unit(4, "mm"),
+    legend.key.spacing.y = unit(0, "mm"),
     plot.margin = margin(),
-    axis.ticks.length = unit(0.5, "mm")
+    axis.ticks.length = unit(0.5, "mm"),
+    legend.box.margin = margin(t = -5)
     )
 ```
 
 
 ```{r export area plot}
-ggsave("figures/areaplot_phylum.pdf", height = 12, width = 12, units = "cm")
+ggsave("figures/fig-3.png", height = 9, width = 18, units = "cm")
 ```
 
 # Genome-resolved metagenomics
