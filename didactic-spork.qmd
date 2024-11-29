@@ -1,23 +1,29 @@
 ---
 title: "Genome-resolved metagenomics on anaerobic enrichments from deep subsurface groundwaters"
-author: "geweaa"
-date: '2024-10-24'
+author: "george.westmeijer@umu.se"
+date: now
 format: html
 toc: true
 toc_float: true
 toc_depth: 3
 number_sections: true
 theme: sandstone
-mainfont: AndaleMono
+mainfont: Helvetica
 monofont: AndaleMono
-fontsize: "10"
+fontsize: "9"
 highlight: textmate
 df_print: paged
 code-fold: true
 code-summary: "Expand code"
-self_contained: false
+self_contained: true
+embed-resources: true
 keep_md: false
 encoding: "UTF-8"
+other-links:
+      - text: GitHub repo (private for now)
+        href: https://github.com/geweaa/didactic-spork
+      - text: Nature guidelines on figures
+        href: https://research-figure-guide.nature.com/figures/preparing-figures-our-specifications/
 ---
 
 ```{r themes, include=FALSE}
@@ -205,8 +211,6 @@ taxref <- tax %>%
   replace_na(list("topphylum" = "Other"))
 ```
 
-
-@fig-phyla reveals something.
 
 
 ```{r plot environmental communities (t0)}
@@ -446,8 +450,6 @@ p1 <- network.survey %>%
   theme(
     strip.background = element_rect(fill = "#F0F0F0")
   )
-
-p1
 ```
 
 
@@ -497,8 +499,6 @@ p2 <- network %>%
   theme(
     strip.background = element_rect(fill = "#F0F0F0")
   )
-
-p2
 ```
 
 
@@ -765,20 +765,20 @@ adiv <- seqtab %>%
 
 adiv %>% filter(sample %in% t0) %>%
   group_by(groundwater) %>% 
-  summarise(mean = round(mean(shannon), digits = 2), sd = round(sd(shannon), digits = 2), n = n()) %>%
-  knitr::kable()
+  summarise(mean = round(mean(shannon), digits = 2), sd = round(sd(shannon), digits = 2), n = n())
 ```
 
 
 ```{r plot alpha diversity, fig.width = 10/2.53}
 p1 <- adiv %>%
+  filter(fraction != "control") %>%
+  mutate(fraction = factor(fraction, levels = c("environmental","fractionated","non-fractionated"))) %>%
   ggplot(aes(
     x = groundwater,
-    y = shannon
+    y = shannon,
+    fill = fraction
     )) +
-  geom_boxplot(aes(fill = fct_relevel(fraction, names(cols.fraction))), 
-               outlier.colour = "white"
-               ) +
+  geom_boxplot( outlier.colour = "white") +
   labs(x = "", y = "Alpha diversity (Shannon H index)", fill = "") +
   theme_tidy(legend = "inside") +
   scale_x_discrete(labels = c("Meteoric", "Marine", "Saline")) + 
@@ -810,26 +810,26 @@ nmds.scores <- vegan::scores(nmds)$sites %>%
 
 ```{r plot nmds on amplicon data, fig.height=14/2.53}
 p2 <- nmds.scores %>%
-  mutate(fraction = if_else(fraction == "environmental", "non-fractionated", fraction)) %>%
-  ggplot(aes(NMDS1, NMDS2, 
-             color = fct_relevel(medium, c("ace","lys","env")), 
-             shape = fraction,
-             fill = medium
+  mutate(medium = factor(medium, levels = c("ace","lys","env"))) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2, 
+             color = fraction, 
+             shape = medium,
+             fill = fraction
              )
          ) +
   geom_vline(xintercept = 0, linetype = 'dotted') +
   geom_hline(yintercept = 0, linetype = 'dotted') +
-  geom_point(size = 4.0, stroke = 0.5) + 
+  geom_point(size = 4.0, stroke = 0.75) + 
   geom_text(aes(label = age), size = 7/.pt, color = "black", na.rm = TRUE) + 
-  scale_shape_manual(values = c("fractionated" = 21, "non-fractionated" = 24), name = "Fraction", 
-                     labels = c("0.1 - 0.45 µm", "All cells")) +
-  scale_colour_manual(values = c('ace' = '#C7B19C', 'lys' = '#899DA4', env = "#8D8680"),
-                      labels = c("Acetate","Lysate","Environmental")) +
-  scale_fill_manual(values = c('ace' = '#FFFFFF', 'lys' = '#FFFFFF', env = alpha("#8D8680", alpha = 0.5)), guide = "none") +
+  scale_shape_manual(values = c("ace" = 23, "lys" = 24, "env" = 21), 
+                     labels = c("Acetate", "Lysate", "Environmental")) +
+  scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), labels = c("Environmental", "0.1 - 0.45 µm", "All cells")) +
+  scale_color_manual(values = cols.fraction, labels = c("Environmental", "0.1 - 0.45 µm", "All cells")) +
   annotate('text', x = Inf, y = -Inf, size = 7/.pt, hjust = 1.05, vjust = -0.5, 
            label = paste('Stress = ', round(nmds$stress, digits = 2))) +
   theme_tidy(legend = "bottom") +
   theme(
+    legend.title = element_blank(),
     legend.box = "vertical",
     legend.spacing.x = unit(0, "mm"),
     legend.box.margin = margin(),
@@ -841,16 +841,19 @@ p2 <- nmds.scores %>%
 
 ```{r combine diversity plots amplicon data, fig.width=14/2.53, fig.height=10/2.53}
 library(patchwork)
+
+
 p1 + p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
   legend.key.size = unit(4.5, "mm"),
+  legend.title = element_blank(),
   legend.margin = margin(),
   panel.border = element_rect(fill = "transparent", linewidth = 0.5),
-  plot.tag.position = c(0.12, 1.05)
+  plot.tag.position = c(0.15, 1.05)
   )
 ```
 
 ```{r export diversity plots}
-ggsave("figures/diversity-baproject.pdf", width = 14, height = 9, units = "cm")
+ggsave("figures/fig-3.pdf", width = 14, height = 9, units = "cm")
 ```
 
 ## Microscopy
@@ -907,7 +910,7 @@ growth %>%
   scale_colour_manual(values = c("unfiltered" = "#1B5331", "filtered" = "#A2A475"),
                       labels = c("0.1 - 0.45 µm","All cells")) +
   scale_linetype(name = "Medium:", labels = c("Acetate", "Cell lysate")) +
-  labs(x = "", y = expression("Cell number (mL"^"-1"*")"), colour = "Fraction") +
+  labs(x = "", y = expression("Cell number (mL"^"-1"*")"), colour = "Fraction:") +
   theme_tidy(legend = "bottom") + 
   theme(
     legend.margin = margin(t = -10),
@@ -1061,7 +1064,7 @@ seqtab %>%
 
 
 ```{r export area plot}
-ggsave("figures/fig-3.png", height = 9, width = 18, units = "cm")
+ggsave("figures/fig-s3.png", height = 9, width = 18, units = "cm")
 ```
 
 # Genome-resolved metagenomics
@@ -1107,8 +1110,6 @@ p1 <- i %>%
     axis.line = element_line(),
     panel.border = element_blank()
   )
-
-p1
 ```
 
 ```{r plot completeness, fig.width=10/2.53}
@@ -1134,8 +1135,6 @@ p2 <- i %>%
     axis.title.y = element_text(margin = margin()),
     plot.margin = margin()
   )
-
-p2
 ```
 
 ```{r lm coding density and genome size}
@@ -1165,8 +1164,6 @@ p3 <- i %>%
     axis.line = element_line(),
     panel.border = element_blank()
   )
-
-p3
 ```
 
 ```{r nmds on kos}
@@ -1214,8 +1211,6 @@ p4 <- nmds.scores %>%
     axis.title.y = element_text(margin = margin()),
     legend.spacing.x = unit(-0.5, "mm")
     )
-
-p4
 ```
 
 ```{r patch the charateristics of the mags, fig.width = 14/2.53}
@@ -1234,7 +1229,7 @@ p1 + p2 + p3 + p4 + plot_layout(guides = "collect", nrow = 2) & plot_annotation(
 ```
 
 ```{r export fig on binstats}
-ggsave(filename = "figures/binstats.pdf", width = 12, height = 14, units = "cm")
+ggsave(filename = "figures/fig-4.pdf", width = 12, height = 14, units = "cm")
 ```
 
 ## Metabolic weight
@@ -1267,9 +1262,9 @@ mw <- mw %>%
   # Some MAGs do not have any metabolic weight: assign a dummy
   rbind(i) %>%
   mutate(label = case_when(
-  pathway == "Organic carbon oxidation - complex carbon degradation" ~ "01: Org. C oxidation: complex C",
-  pathway == "Organic carbon oxidation - amino acid utilization" ~ "02: Org. C oxidation: AA utilization",
-  pathway == "Organic carbon oxidation - aromatics degradation" ~ "03: Org. C oxidation: aromatics",
+  pathway == "Organic carbon oxidation - complex carbon degradation" ~ "01: Organic C oxidation: complex C",
+  pathway == "Organic carbon oxidation - amino acid utilization" ~ "02: Organic C oxidation: AA utilization",
+  pathway == "Organic carbon oxidation - aromatics degradation" ~ "03: Organic C oxidation: aromatics",
   pathway == "Carbon fixation - CBB cycle (Rubisco)" ~ "04: C fixation: CBB cycle",
   pathway == "Carbon fixation - Reverse TCA cycle" ~ "05: C fixation: Reverse TCA",
   pathway == "Carbon fixation - 3HP/4HB" ~ "06: C fixation: 3HP/4HB",
@@ -1279,7 +1274,7 @@ mw <- mw %>%
   pathway == "Fermentation" ~ "10: Fermentation",
   pathway == "Hydrogen generation" ~ "11: Hydrogen generation",
   pathway == "Hydrogen oxidation" ~ "12: Hydrogen oxidation",
-  pathway == "N2 fixation - nifDK||vnfDKG||nifH" ~ "13: N2 fixation: nifDK, nifH",
+  pathway == "N2 fixation - nifDK||vnfDKG||nifH" ~ "13: N fixation: nifDK, nifH",
   pathway == "Nitrate reduction - napAB" ~ "13: Nitrate reduction: napAB",
   pathway == "Nitrite ammonification - nirBD" ~ "14: Nitrite ammonification: nirBD",
   pathway == "Nitrite ammonification - nrfADH" ~ "15: Nitrite ammonification: nrfADH",
@@ -1306,11 +1301,13 @@ cols.phylum <- c(
 )
 ```
 
+
 ```{r phylum for metabolic weight}
 name <- bintax %>%
   filter(phylum %in% names(cols.phylum)) %>%
   mutate(phylum = factor(phylum, levels = names(cols.phylum))) %>%
   arrange(phylum) %>%
+  mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
   mutate(taxon = if_else(is.na(species), paste(genus, "sp."), species)) %>%
   pull(taxon) %>% unique()
 
@@ -1318,6 +1315,7 @@ p1 <- bintax %>%
   # Use subset of bins
   filter(phylum %in% names(cols.phylum)) %>%
   mutate(taxonomy = "Taxonomy") %>%
+  mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
   mutate(taxon = if_else(is.na(species), paste(genus, "sp."), species)) %>%
   # Plot
   ggplot(aes(fct_relevel(taxon, name), 
@@ -1339,9 +1337,8 @@ p1 <- bintax %>%
     axis.text.y = element_blank(),
     panel.border = element_rect(linewidth = 1,fill = NA)
   )
-
-p1
 ```
+
 
 ```{r plot the metabolic weight}
 i <- mw %>%
@@ -1349,7 +1346,9 @@ i <- mw %>%
   pull(label) %>% unique()
 
 p2 <- mw %>%
+  group_by(genome, label) %>% summarise(mw = mean(mw), .groups = "drop") %>%
   inner_join(bintax, by = "genome") %>% filter(phylum %in% names(cols.phylum)) %>%
+  mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
   mutate(taxon = if_else(is.na(species), paste(genus, "sp."), species)) %>%
   # Order the genomes
   mutate(taxon = factor(taxon, name)) %>%
@@ -1378,18 +1377,18 @@ p2 <- mw %>%
     axis.text.x = element_blank(),
     panel.grid.major = element_blank()
   )
-
-p2
 ```
+
 
 ```{r combine phylum and metabolic ouput}
 library(patchwork)
 
 p1 / p2 & theme(
-  legend.box.margin = margin(l = -8)
+  legend.box.margin = margin(l = -8),
+  plot.margin = margin(b = 2)
   )
 ```
 
 ```{r export plot metabolic weight}
-ggsave("figures/metabolic.pdf", width = 18, height = 18, units = "cm")
+ggsave("figures/fig-5.pdf", width = 18, height = 18, units = "cm")
 ```
