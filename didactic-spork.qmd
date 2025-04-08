@@ -32,7 +32,7 @@ source("../../Protocols/theme.R")
 
 ```{r setup, include=FALSE}
 library(tidyverse)
-knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(cache = FALSE)
 ```
 
 # Read data and assign colors
@@ -49,7 +49,9 @@ seqtab <- read_tsv("data/ASV_table.tsv.gz", col_types = cols(.default = col_char
 
 tax <- read_tsv("data/ASV_tax.tsv.gz", col_types = cols(.default = col_character()))
                
-smd <- read_tsv("data/smd.tsv", col_types = cols(.default = col_character())) 
+smd <- read_tsv("data/smd.tsv", col_types = cols(.default = col_character())) %>%
+  filter(!sample %in% c("P21015_1082","P21015_1083","P21015_1084","P21015_1087","P21015_1088","P21015_1089")) %>%
+  filter(fraction != "control")
 ```
 
 
@@ -87,9 +89,9 @@ cols.origin <- c(
   )
 
 cols.fraction <- c(
-  "environmental" = "#8D8680",
+  "environmental" = "#FAEFD1",
   "fractionated" = "#A2A475",
-  "non-fractionated" = "#C7B19C"
+  "non-fractionated" = "#1B5331"
   )
 
 cols.mag <- c(
@@ -163,92 +165,10 @@ rare %>%
 ```
 
 ```{r}
-ggsave(filename = "figures/rarecurve.pdf", width = 100, height = 80, units = "mm")
+ggsave(filename = "figures/fig-s1.pdf", width = 100, height = 80, units = "mm")
 ```
 
 
-
-## Overview community structure t0
-
-To visualize the community composition, the most abundant phyla are identified while grouping less abundant phyla as "Other". ASVs that are not identified on phylum level are included as "Unidentified".
-
-```{r most abundant phyla (t0)}
-t <- seqtab %>%
-  filter(sample %in% t0) %>%
-  inner_join(tax, by = "seqid") %>%
-  group_by(phylum, sample) %>%
-  # Sum the abundance of each phylum within a sample
-  summarise(relab = sum(relab), .groups = 'drop_last') %>%
-  # Calculate the mean abundance of each phylum over the categories
-  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
-  filter(!is.na(phylum)) %>%
-  top_n(8, mean_relab)
-
-t %>% arrange(desc(mean_relab)) %>% knitr::kable()
-```
-
-
-```{r}
-taxref <- tax %>%
-  left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
-  mutate(topphylum = if_else(is.na(phylum), "Unidentified", topphylum)) %>%
-  replace_na(list("topphylum" = "Other"))
-```
-
-
-
-```{r plot environmental communities (t0)}
-#| fig-cap: Community composition of the groundwater samples (t0) for each groundwater type (n = 6) before (October 2019) and after (April 2020) collection of groundwater for inoculation. The eight most abundant phyla are shown, grouping less abundant phyla as "Other" and uncharacterized ASVs as "Unidentified".
-#| label: fig-phyla
-#| out-width: 100%
-
-p3 <- seqtab %>%
-  filter(sample %in% t0) %>%
-  inner_join(taxref, by = "seqid") %>%
-  # Summarize in order to have the sum for each category and topphylum
-  group_by(sample, topphylum) %>% 
-  summarise(mrelab = sum(relab), .groups = 'drop') %>%
-  # Call the plot
-  ggplot(aes(x = fct_relevel(sample, t0), 
-             y = mrelab * 100, 
-             fill = fct_relevel(topphylum, names(cols.phylum) %>% rev())
-             )
-         ) +
-  labs(x = '', y = 'Relative abundance (%)', fill = "") +
-  geom_col() + scale_y_continuous(expand = c(0.01,0), limits = c(-10,101)) +
-  annotate(geom = "segment", x =  0.55, xend =  3.45, y = -1, yend = -1, linewidth = 0.5) +
-  annotate(geom = "segment", x =  3.55, xend =  6.45, y = -1, yend = -1, linewidth = 0.5) +
-  annotate(geom = "segment", x =  6.55, xend =  9.45, y = -1, yend = -1, linewidth = 0.5) +
-  annotate(geom = "segment", x =  9.55, xend = 12.45, y = -1, yend = -1, linewidth = 0.5) +
-  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -1, yend = -1, linewidth = 0.5) +
-  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -1, yend = -1, linewidth = 0.5) +
-  # Labels dates
-  annotate(geom = "text", x =  2, y = -3.5, label = "Oct 2019", size = 7/.pt) +
-  annotate(geom = "text", x =  5, y = -3.5, label = "April 2020", size = 7/.pt) +
-  annotate(geom = "text", x =  8, y = -3.5, label = "Oct 2019", size = 7/.pt) +
-  annotate(geom = "text", x = 11, y = -3.5, label = "April 2020", size = 7/.pt) +
-  annotate(geom = "text", x = 14, y = -3.5, label = "Oct 2019", size = 7/.pt) +
-  annotate(geom = "text", x = 17, y = -3.5, label = "April 2020", size = 7/.pt) +
-  # Labels groundwater
-  annotate(geom = "text", x = 3.5, y = -8, label = "Meteoric", size = 7/.pt) +
-  annotate(geom = "text", x = 9.5, y = -8, label = "Marine", size = 7/.pt) +
-  annotate(geom = "text", x =15.5, y = -8, label = "Saline", size = 7/.pt) +
-  scale_fill_manual(values = cols.phylum) + 
-  guides(fill = guide_legend(ncol = 3, reverse = TRUE)) +
-  theme_tidy(legend = "bottom") + 
-  theme(
-    aspect.ratio = 0.75,
-    axis.text.x = element_blank(), 
-    axis.ticks.x = element_blank(),
-    legend.key.height = unit(3.5, "mm"),
-    legend.margin = margin(t = -20),
-    legend.text = element_text(margin = margin(l = 2)),
-    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
-    legend.key.spacing.y = unit(0, "mm")
-    )
-
-p3
-```
 
 ## Redundancy analysis
 
@@ -362,7 +282,7 @@ p2 <- rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
     ) +
   geom_label(
     data = lab, mapping = aes(x = RDA1/10, y = RDA2/10, label = label),
-    size = 7/.pt, parse = TRUE, label.size = 0, label.padding = unit(0.1, "lines")
+    size = 6/.pt, parse = TRUE, label.size = 0, label.padding = unit(0.1, "lines")
     ) + 
   scale_size(range = c(1,8), name = "No. of ASVs") +
   annotate("text", x = -0.07, y =-0.3, label = "Meteoric", colour = cols.gw[1], size = 7/.pt) +
@@ -374,10 +294,10 @@ p2 <- rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
   # Add R-squared
   annotate("text", x = Inf, y = -Inf, 
            label = "paste(R ^ 2, \" = 0.52\")", 
-           size = 7/.pt, vjust = -0.5, hjust = 1.05, parse = TRUE) +
+           size = 6/.pt, vjust = -0.5, hjust = 1.05, parse = TRUE) +
   scale_color_manual(name = "",values = cols.gw, guide = "none") +
   scale_fill_manual(name = "",values = cols.gw, guide = "none") +
-  theme_tidy() +
+  theme_tidy(fontsize = 6) +
   theme(
     legend.background = element_rect(fill = NA),
     panel.border = element_rect(fill = "transparent", linewidth = 0.75),
@@ -385,17 +305,151 @@ p2 <- rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
     legend.position = "inside",
     legend.position.inside  = c(0.9,0.85)
     )
+
+p2
 ```
 
 
-```{r fig.width=18/2.53, fig.height=9/2.53}
+## Overview community structure t0
+
+To visualize the community composition, the most abundant phyla are identified while grouping less abundant phyla as "Other". ASVs that are not identified on phylum level are included as "Unidentified".
+
+```{r most abundant phyla (t0)}
+t <- seqtab %>%
+  filter(sample %in% t0) %>%
+  inner_join(tax, by = "seqid") %>%
+  group_by(phylum, sample) %>%
+  # Sum the abundance of each phylum within a sample
+  summarise(relab = sum(relab), .groups = 'drop_last') %>%
+  # Calculate the mean abundance of each phylum over the categories
+  summarise(mean_relab = sum(relab), .groups = 'drop') %>%
+  filter(!is.na(phylum)) %>%
+  top_n(8, mean_relab)
+
+t %>% arrange(desc(mean_relab)) %>% knitr::kable()
+```
+
+
+```{r}
+taxref <- tax %>%
+  left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
+  mutate(topphylum = if_else(is.na(phylum), "Unidentified", topphylum)) %>%
+  replace_na(list("topphylum" = "Other"))
+```
+
+
+
+```{r plot environmental communities (t0)}
+#| fig-cap: Community composition of the groundwater samples (t0) for each groundwater type (n = 6) before (October 2019) and after (April 2020) collection of groundwater for inoculation. The eight most abundant phyla are shown, grouping less abundant phyla as "Other" and uncharacterized ASVs as "Unidentified".
+#| label: fig-phyla
+#| out-width: 100%
+
+p3 <- seqtab %>%
+  filter(sample %in% t0) %>%
+  inner_join(taxref, by = "seqid") %>%
+  # Summarize in order to have the sum for each category and topphylum
+  group_by(sample, topphylum) %>% 
+  summarise(mrelab = sum(relab), .groups = 'drop') %>%
+  # Call the plot
+  ggplot(aes(x = fct_relevel(sample, t0), 
+             y = mrelab * 100, 
+             fill = fct_relevel(topphylum, names(cols.phylum) %>% rev())
+             )
+         ) +
+  labs(x = '', y = 'Relative abundance (%)', fill = "") +
+  geom_col() + scale_y_continuous(expand = c(0.01,0), limits = c(-10,101)) +
+  annotate(geom = "segment", x =  0.55, xend =  3.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x =  3.55, xend =  6.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x =  6.55, xend =  9.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x =  9.55, xend = 12.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x = 12.55, xend = 15.45, y = -1, yend = -1, linewidth = 0.5) +
+  annotate(geom = "segment", x = 15.55, xend = 18.45, y = -1, yend = -1, linewidth = 0.5) +
+  # Labels dates
+  annotate(geom = "text", x =  2, y = -3.5, label = "Oct 2019", size = 6/.pt) +
+  annotate(geom = "text", x =  5, y = -3.5, label = "April 2020", size = 6/.pt) +
+  annotate(geom = "text", x =  8, y = -3.5, label = "Oct 2019", size = 6/.pt) +
+  annotate(geom = "text", x = 11, y = -3.5, label = "April 2020", size = 6/.pt) +
+  annotate(geom = "text", x = 14, y = -3.5, label = "Oct 2019", size = 6/.pt) +
+  annotate(geom = "text", x = 17, y = -3.5, label = "April 2020", size = 6/.pt) +
+  # Labels groundwater
+  annotate(geom = "text", x = 3.5, y = -8, label = "Meteoric", size = 6/.pt) +
+  annotate(geom = "text", x = 9.5, y = -8, label = "Marine", size = 6/.pt) +
+  annotate(geom = "text", x =15.5, y = -8, label = "Saline", size = 6/.pt) +
+  scale_fill_manual(values = cols.phylum) + 
+  guides(fill = guide_legend(ncol = 3, reverse = TRUE)) +
+  theme_tidy(legend = "bottom", fontsize = 6) + 
+  theme(
+    aspect.ratio = 0.75,
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    legend.key.height = unit(3.5, "mm"),
+    legend.margin = margin(t = -20),
+    legend.text = element_text(margin = margin(l = 2)),
+    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
+    legend.key.spacing.y = unit(0, "mm")
+    )
+
+p3
+```
+
+## Alpha diversity
+
+```{r estimate alpha diversity}
+adiv <- seqtab %>%
+  select(-relab) %>%
+  spread(seqid, count, fill = 0) %>% 
+  column_to_rownames('sample') %>%
+  vegan::diversity() %>% as.data.frame() %>%
+  rownames_to_column('sample') %>%
+  rename(shannon = 2) %>%
+  inner_join(smd, by = "sample")
+
+adiv %>% filter(sample %in% t0) %>%
+  group_by(groundwater) %>% 
+  summarise(mean = round(mean(shannon), digits = 2), sd = round(sd(shannon), digits = 2), n = n())
+```
+
+
+```{r plot alpha diversity, fig.width = 10/2.53}
+p4 <- adiv %>%
+  filter(fraction != "control") %>%
+  mutate(fraction = factor(fraction, levels = c("environmental","fractionated","non-fractionated"))) %>%
+  ggplot(aes(
+    x = groundwater,
+    y = shannon,
+    fill = fraction
+    )) +
+  geom_boxplot( outlier.colour = "white") +
+  labs(x = "", y = "Shannon's diversity index (H)", fill = "") +
+  theme_tidy(legend = "inside", fontsize = 6) +
+  scale_x_discrete(labels = c("Meteoric", "Marine", "Saline")) + 
+  scale_fill_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "Non-fractionated")) +
+  theme( 
+    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
+    legend.margin = margin(),
+    legend.background = element_rect(fill = "NA"),
+    legend.position.inside = c(0.8,0.88),
+    legend.text = element_text(margin = margin(l = 1))
+  )
+
+p4
+```
+
+
+```{r fig.width=18/2.53, fig.width=18/2.53}
 library(patchwork)
 
-p2 + p3 & theme(plot.margin = margin(l = 4))
+p1 + p2 + p3 + p4 + plot_layout(nrow = 2) + plot_annotation(tag_levels = "a") & 
+  theme(
+    plot.margin = margin(t = 4),
+    plot.tag.location = "panel",
+    plot.tag.position = c(-0.05, 1.0),
+    plot.tag = element_text(size = 8, face = "bold")
+    )
 ```
 
 ```{r}
-ggsave("figures/fig-1.pdf", width = 18, height = 10, units = "cm")
+ggsave("figures/fig-1.pdf", width = 180, height = 180, units = "mm")
 ```
 
 
@@ -663,6 +717,8 @@ p2 <- network %>%
   theme(
     strip.background = element_rect(fill = "#F0F0F0")
   )
+
+p2
 ```
 
 ```{r, fig.width=14/2.53, fig.height=16/2.53}
@@ -683,15 +739,68 @@ ggsave("figures/fig-s4.pdf", width = 140, height = 160, units = "mm")
 
 # 16S data cultures
 
-## NMDS cultures three groundwaters (supplemental)
+## NMDS cultures: both initial and follow-up
+
+```{r nmds on amplicon data}
+set.seed(999)
+
+nmds <- seqtab %>% # Full size fraction
+  inner_join(smd, by = "sample") %>%
+  filter(!is.na(age) | sample %in% t0 & groundwater == "KR0015") %>%
+  group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
+  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
+  column_to_rownames("sample") %>% vegan::metaMDS()
+
+vegan::scores(nmds)$sites %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  inner_join(smd, by = "sample") -> nmds.scores
+```
+
+
+```{r plot nmds on amplicon data, fig.height=14/2.53}
+p1 <- nmds.scores %>%
+  mutate(medium = factor(medium, levels = c("ace","lys","env"))) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2, 
+             shape = medium,
+             fill = fraction, color = fraction
+             )
+         ) +
+  geom_vline(xintercept = 0, linetype = 'dotted') +
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  geom_point(size = 4.0, stroke = 0.75) + 
+  geom_text(data = nmds.scores, 
+            aes(label = age), 
+            size = 6/.pt, color = "black", na.rm = TRUE) + 
+  scale_shape_manual(values = c("ace" = 23, "lys" = 24, "env" = 21), 
+                     labels = c("Acetate", "Lysate", "Environmental")) +
+  scale_color_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "Non-fractionated")) +
+  scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), guide = "none") +
+  annotate('text', x = -Inf, y = -Inf, size = 6/.pt, hjust = -0.1, vjust = -0.5, 
+           label = paste('Stress = ', round(nmds$stress, digits = 2))) +
+  theme_tidy(legend = "bottom", fontsize = 6) +
+  theme(
+    #axis.title.x = element_blank(),
+    legend.title = element_blank(),
+    legend.box = "vertical",
+    legend.spacing.x = unit(0, "mm"),
+    legend.box.margin = margin(),
+    legend.margin = margin(),
+    legend.text = element_text(margin = margin(l = 2, r = 8, unit = "pt")),
+    legend.key.spacing.x = unit(0, "mm")
+    )
+
+p1
+```
+
+
 
 ```{r nmds unfiltered}
 set.seed(999)
 
 nmds <- seqtab %>% # Full size fraction
   inner_join(smd, by = "sample") %>%
-  filter(!sample %in% paste("P21015_10", seq(42,81), sep = "")) %>% # Data from bachelor project
-  filter(fraction == "non-fractionated" | fraction == "environmental") %>%
+  filter(is.na(age) & groundwater == "KR0015") %>%
   group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
   select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
   column_to_rownames("sample") %>% vegan::metaMDS()
@@ -705,38 +814,48 @@ vegan::scores(nmds)$sites %>%
 Plot the ordination
 
 ```{r plot nmds unfiltered, include = T}
-p1 <- nmds.scores %>%
-  mutate(medium = if_else(medium == "env","Environmental","Culture")) %>%
-  # Plot
-  ggplot(aes(x = NMDS1, y = NMDS2
-             )) +
+p2 <- nmds.scores %>%
+  mutate(medium = factor(medium, levels = c("ace","lys","env"))) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2, 
+             shape = medium,
+             fill = fraction, color = fraction
+             )
+         ) +
   geom_vline(xintercept = 0, linetype = 'dotted') +
   geom_hline(yintercept = 0, linetype = 'dotted') +
-  # Points for samples, coloured by origin
-  geom_point(aes(fill = origin,
-                 colour = origin,
-                 shape = medium,
-                 ), size = 3, stroke = 0.5) +
-  theme_tidy() +
-  scale_shape_manual(values = c("Culture" = 21, "Environmental" = 23), name = "") +
-  scale_fill_manual(values = alpha(cols.origin, alpha = 0.5), guide = "none") +
-  scale_colour_manual(values = cols.origin, guide = "none") +
-  annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
-           label = paste('Stress = ', round(nmds$stress, digits = 2)),
-           hjust = -0.1, vjust = -1,
-           ) +
-  ggtitle("All cells") +
+  geom_point(size = 4.0, stroke = 0.75) + 
+  geom_text(data = nmds.scores, 
+            aes(label = age), 
+            size = 6/.pt, color = "black", na.rm = TRUE) + 
+  scale_shape_manual(values = c("ace" = 23, "lys" = 24, "env" = 21), 
+                     labels = c("Acetate", "Lysate", "Environmental")) +
+  scale_color_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "Non-fractionated")) +
+  scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), guide = "none") +
+  annotate('text', x = -Inf, y = -Inf, size = 6/.pt, hjust = -0.1, vjust = -0.5, 
+           label = paste('Stress = ', round(nmds$stress, digits = 2))) +
+  theme_tidy(legend = "bottom", fontsize = 6) +
   theme(
-    plot.title = element_text(hjust = .5, size = 7)
+    #axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_blank(),
+    legend.box = "vertical",
+    legend.spacing.x = unit(0, "mm"),
+    legend.box.margin = margin(),
+    legend.margin = margin(),
+    legend.text = element_text(margin = margin(l = 2, r = 8, unit = "pt")),
+    legend.key.spacing.x = unit(0, "mm")
     )
+
+p2
 ```
 
 
 ```{r extract nmds coordinates filtered}
-nmds <- seqtab %>% # Small size fraction
+set.seed(999)
+
+nmds <- seqtab %>% # Full size fraction
   inner_join(smd, by = "sample") %>%
-  filter(!sample %in% paste("P21015_10", seq(42,81), sep = "")) %>% # Data from bachelor project
-  filter(fraction == "0.1 - 0.45 µm" | fraction == "environmental") %>%
+  filter(is.na(age) & groundwater == "SA1420") %>%
   group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
   select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
   column_to_rownames("sample") %>% vegan::metaMDS()
@@ -749,132 +868,11 @@ vegan::scores(nmds)$sites %>%
 
 
 ```{r plot nmds filtered}
-p2 <- nmds.scores %>%
-  mutate(medium = if_else(medium == "env","Environmental","Culture")) %>%
-  # Plot
-  ggplot(aes(x = NMDS1, y = NMDS2)) +
-  geom_vline(xintercept = 0, linetype = 'dotted') +
-  geom_hline(yintercept = 0, linetype = 'dotted') +
-  # Points for samples, coloured by nature
-  geom_point(aes(
-    colour = origin,
-    fill = origin, 
-    shape = medium), size = 3, stroke = 0.5) +
-  theme_tidy() +
-  scale_shape_manual(values = c("Culture" = 21, "Environmental" = 23), name = "") +
-  scale_fill_manual(values = alpha(cols.origin, alpha = 0.5), guide = "none") +
-  scale_colour_manual(values = cols.origin, name = "Groundwater", labels = c("Meteoric", "Marine", "Saline")) +
-  annotate('text', x = -Inf, y = -Inf, size = 7/.pt, 
-           label = paste('Stress = ', round(nmds$stress, digits = 2)),
-           hjust = -.1, vjust = -1,
-           ) +
-  ggtitle("< 0.45 µm fraction") +
-  theme(plot.title = element_text(hjust = .5, size = 7),
-        axis.title.y = element_blank())
-```
-
-
-```{r}
-library(patchwork)
-```
-
-
-```{r plot nmds patchwork}
-#| out-width: 100%
-
-p1 + p2 + plot_layout(guides = "collect") & 
-  theme(
-    legend.position = "right",
-    plot.background = element_blank(),
-    legend.text = element_text(margin = margin()),
-    legend.box.margin = margin(l = -10),
-    plot.margin = margin(l = 4)
-    )
-```
-
-```{r}
-ggsave("figures/fig-s2.pdf", height = 9, width = 18, units = "cm")
-```
-
-
-
-## Diversity (alpha + beta) bachelor project (P21015)
-
-Estimate alpha diversity using the Shannon-Weaver index on species level
-
-```{r estimate alpha diversity}
-adiv <- seqtab %>%
-  select(-relab) %>%
-  spread(seqid, count, fill = 0) %>% 
-  column_to_rownames('sample') %>%
-  vegan::diversity() %>% as.data.frame() %>%
-  rownames_to_column('sample') %>%
-  rename(shannon = 2) %>%
-  inner_join(smd, by = "sample")
-
-adiv %>% filter(sample %in% t0) %>%
-  group_by(groundwater) %>% 
-  summarise(mean = round(mean(shannon), digits = 2), sd = round(sd(shannon), digits = 2), n = n())
-```
-
-
-```{r plot alpha diversity, fig.width = 10/2.53}
-p1 <- adiv %>%
-  filter(fraction != "control") %>%
-  mutate(fraction = factor(fraction, levels = c("environmental","fractionated","non-fractionated"))) %>%
-  ggplot(aes(
-    x = groundwater,
-    y = shannon,
-    fill = fraction
-    )) +
-  geom_boxplot( outlier.colour = "white") +
-  labs(x = "", y = "Shannon's diversity index (H)", fill = "") +
-  theme_tidy(legend = "inside", fontsize = 6) +
-  scale_x_discrete(labels = c("Meteoric", "Marine", "Saline")) + 
-  scale_fill_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "All cells")) +
-  theme( 
-    legend.margin = margin(),
-    legend.background = element_rect(fill = "NA"),
-    legend.position.inside = c(0.8,0.88),
-    legend.text = element_text(margin = margin(l = 1))
-  )
-```
-
-```{r nmds on amplicon data}
-set.seed(999)
-
-nmds <- seqtab %>%
-  filter(sample %in% paste("P21015_10", seq(42,81), sep = "") |
-           sample %in% c("P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022")
-           ) %>%
-  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
-  column_to_rownames("sample") %>%
-  vegan::metaMDS()
-
-nmds.scores <- vegan::scores(nmds)$sites %>%
-  as.data.frame() %>%
-  rownames_to_column("sample") %>%
-  inner_join(smd, by = "sample")
-```
-
-
-```{r plot nmds on amplicon data, fig.height=14/2.53}
-# 'i' contains the samples that will be included in panel c
-i <- c(
-  "P21015_1045", "P21015_1049", "P21015_1053", "P21015_1065", "P21015_1069", "P21015_1077", # Lysate
-  "P21015_1043", "P21015_1047", "P21015_1051", "P21015_1055", "P21015_1075", "P21015_1079"  # Acetate
-)
-
-i <- smd %>% 
-  filter(grepl("P21", sample)) %>%
-  filter(fraction == "fractionated") %>% arrange(medium) %>% pull(sample)
-
-p2 <- nmds.scores %>%
+p3 <- nmds.scores %>%
   mutate(medium = factor(medium, levels = c("ace","lys","env"))) %>%
   ggplot(aes(x = NMDS1, y = NMDS2, 
-             color = fraction, 
              shape = medium,
-             fill = fraction
+             fill = fraction, color = fraction
              )
          ) +
   geom_vline(xintercept = 0, linetype = 'dotted') +
@@ -885,12 +883,13 @@ p2 <- nmds.scores %>%
             size = 6/.pt, color = "black", na.rm = TRUE) + 
   scale_shape_manual(values = c("ace" = 23, "lys" = 24, "env" = 21), 
                      labels = c("Acetate", "Lysate", "Environmental")) +
-  scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), labels = c("Environmental", "< 0.45 µm", "All cells")) +
-  scale_color_manual(values = cols.fraction, labels = c("Environmental", "0.1 - 0.45 µm", "All cells")) +
-  annotate('text', x = Inf, y = -Inf, size = 6/.pt, hjust = 1.05, vjust = -0.5, 
+  scale_color_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "Non-fractionated")) +
+  scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), guide = "none") +
+  annotate('text', x = -Inf, y = -Inf, size = 6/.pt, hjust = -0.1, vjust = -0.5, 
            label = paste('Stress = ', round(nmds$stress, digits = 2))) +
   theme_tidy(legend = "bottom", fontsize = 6) +
   theme(
+    axis.title.y = element_blank(),
     legend.title = element_blank(),
     legend.box = "vertical",
     legend.spacing.x = unit(0, "mm"),
@@ -899,7 +898,82 @@ p2 <- nmds.scores %>%
     legend.text = element_text(margin = margin(l = 2, r = 8, unit = "pt")),
     legend.key.spacing.x = unit(0, "mm")
     )
+
+p3
 ```
+
+```{r}
+set.seed(999)
+
+nmds <- seqtab %>% # Full size fraction
+  inner_join(smd, by = "sample") %>%
+  filter(is.na(age) & groundwater == "SA2600") %>%
+  group_by(seqid) %>% filter(count > 2) %>% ungroup() %>%
+  select(seqid, sample, count) %>% spread(seqid, count, fill = 0) %>%
+  column_to_rownames("sample") %>% vegan::metaMDS()
+
+vegan::scores(nmds)$sites %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  inner_join(smd, by = "sample") -> nmds.scores
+```
+
+```{r}
+p4 <- nmds.scores %>%
+  mutate(medium = factor(medium, levels = c("ace","lys","env"))) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2, 
+             shape = medium,
+             fill = fraction, color = fraction
+             )
+         ) +
+  geom_vline(xintercept = 0, linetype = 'dotted') +
+  geom_hline(yintercept = 0, linetype = 'dotted') +
+  geom_point(size = 4.0, stroke = 0.75) + 
+  geom_text(data = nmds.scores, 
+            aes(label = age), 
+            size = 6/.pt, color = "black", na.rm = TRUE) + 
+  scale_shape_manual(values = c("ace" = 23, "lys" = 24, "env" = 21), 
+                     labels = c("Acetate", "Lysate", "Environmental"), guide = "none") +
+  scale_color_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "Non-fractionated"), guide = "none") +
+  scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), guide = "none") +
+  annotate('text', x = -Inf, y = -Inf, size = 6/.pt, hjust = -0.1, vjust = -0.5, 
+           label = paste('Stress = ', round(nmds$stress, digits = 2))) +
+  theme_tidy(legend = "bottom", fontsize = 6) +
+  theme(
+    axis.title.y = element_blank()
+  )
+
+p4
+```
+
+
+
+```{r}
+library(patchwork)
+```
+
+
+```{r plot nmds patchwork}
+#| out-width: 100%
+
+p2 + p3 + p4 + plot_layout(nrow = 1, guides = "collect") + plot_annotation(tag_levels = "a") & theme(
+  legend.position = "bottom",
+  plot.tag.location = "panel",
+  plot.tag.position = c(0.04, 0.97),
+  plot.margin = margin(t = 3, r = 3),
+  panel.border = element_rect(fill = "transparent", linewidth = 0.75)
+)
+```
+
+```{r}
+ggsave("figures/fig-s2.pdf", height = 90, width = 180, units = "mm")
+```
+
+
+
+## Diversity (alpha + beta) bachelor project (P21015)
+
+Estimate alpha diversity using the Shannon-Weaver index on species level
 
 
 ```{r}
@@ -1005,7 +1079,7 @@ p1 <- qpcr %>%
                 ) +
   scale_linetype(name = "Medium:", labels = c("Acetate", "Cell lysate")) +
   scale_fill_manual(values = cols.fraction, 
-                    labels = c("< 0.45 µm fraction", "All cells"),
+                    labels = c("< 0.45 µm fraction", "Non-fractionated"),
                     name = "") +
   theme_tidy(legend = "right") +
   theme(
@@ -1144,7 +1218,7 @@ cols.phylum <- c(
 ```
 
 ```{r areaplot P21015 phylum}
-seqtab %>%
+px <- seqtab %>%
   filter(sample %in% paste("P21015", seq(1042,1081), sep = "_")
            ) %>%
   inner_join(taxref, by = "seqid") %>%
@@ -1154,8 +1228,8 @@ seqtab %>%
   inner_join(smd, by = "sample") %>%
   mutate(age = as.numeric(.$age)) %>% 
   mutate(fraction = case_when(
-    fraction == "non-fractionated" & medium == "ace" ~ "Acetate, all cells",
-    fraction == "non-fractionated" & medium == "lys" ~ "Lysate, all cells",
+    fraction == "non-fractionated" & medium == "ace" ~ "Acetate, non-fractionated",
+    fraction == "non-fractionated" & medium == "lys" ~ "Lysate, non-fractionated",
     fraction == "fractionated" & medium == "ace" ~ "Acetate, < 0.45 µm fraction",
     fraction == "fractionated" & medium == "lys" ~ "Lysate, < 0.45 µm fraction"
   )) %>%
@@ -1167,18 +1241,19 @@ seqtab %>%
     fill = topphylum)) +
   geom_col() + 
   scale_x_continuous(n.breaks = 10) +
-  facet_wrap(~ fraction, nrow = 1) +
+  facet_wrap(~ fraction, nrow = 2) +
   labs(x = 'Week', y = 'Relative abundance (%)', fill = '') +
   scale_fill_manual(values = cols.phylum) + 
-  guides(fill = guide_legend(reverse = TRUE, ncol = 3)) +
-  theme_tidy(legend = "bottom") + 
+  guides(fill = guide_legend(reverse = TRUE, nrow = 3)) +
+  theme_tidy(legend = "bottom", fontsize = 6) + 
   theme(
-    aspect.ratio = 1.2,
+    aspect.ratio = 1.0,
     panel.border = element_rect(fill = "transparent", linewidth = 0.5),
     strip.background = element_blank(), 
     legend.background = element_blank(),
     legend.key.height = unit(4, "mm"),
-    legend.key.spacing.y = unit(0, "mm"),
+    legend.key.width = unit(3, "mm"),
+    legend.margin = margin(l = -10),
     plot.margin = margin(),
     axis.ticks.length = unit(0.5, "mm"),
     legend.box.margin = margin(t = -5)
@@ -1186,8 +1261,20 @@ seqtab %>%
 ```
 
 
+```{r}
+p1 + px + plot_annotation(tag_levels = "a") & theme(
+  plot.tag.location = "plot",
+  plot.tag.position = c(0.05,0.98),
+  plot.margin = margin(r = 2),
+  legend.text = element_text(margin = margin(l = 3))
+)
+```
+
+
+
+
 ```{r export area plot}
-ggsave("figures/fig-s3.pdf", height = 9, width = 18, units = "cm")
+ggsave("figures/fig-sx.pdf", height = 11, width = 18, units = "cm")
 ```
 
 ## Barplot KR0015 - SA1420 - SA2600
@@ -1237,9 +1324,9 @@ p1 <- seqtab %>%
   mutate(phylum = factor(phylum, levels = names(rev(cols.phylum)))) %>%
   mutate(fraction = case_when(
     fraction == "fractionated" & medium == "lys" ~ "Fractionated: lysate",
-    fraction == "fractionated" & medium == "srm" ~ "Fractionated: acetate",
+    fraction == "fractionated" & medium == "ace" ~ "Fractionated: acetate",
     fraction == "non-fractionated" & medium == "lys" ~ "All cells: lysate",
-    fraction == "non-fractionated" & medium == "srm" ~ "All cells: acetate",
+    fraction == "non-fractionated" & medium == "ace" ~ "All cells: acetate",
   )) %>%
    # Call the plot
   ggplot(aes(
@@ -1286,9 +1373,9 @@ p2 <- seqtab %>%
   mutate(phylum = factor(phylum, levels = names(rev(cols.phylum)))) %>%
   mutate(fraction = case_when(
     fraction == "fractionated" & medium == "lys" ~ "Fractionated: lysate",
-    fraction == "fractionated" & medium == "srm" ~ "Fractionated: acetate",
+    fraction == "fractionated" & medium == "ace" ~ "Fractionated: acetate",
     fraction == "non-fractionated" & medium == "lys" ~ "All cells: lysate",
-    fraction == "non-fractionated" & medium == "srm" ~ "All cells: acetate",
+    fraction == "non-fractionated" & medium == "ace" ~ "All cells: acetate",
   )) %>%
    # Call the plot
   ggplot(aes(
@@ -1308,6 +1395,8 @@ p2 <- seqtab %>%
     legend.margin = margin(t = -10)
   )
 ```
+
+
 ```{r}
 t <- seqtab %>%
   inner_join(smd, by = "sample") %>% filter(groundwater == "SA2600") %>%
@@ -1334,9 +1423,9 @@ p3 <- seqtab %>%
   mutate(phylum = factor(phylum, levels = names(rev(cols.phylum)))) %>%
   mutate(fraction = case_when(
     fraction == "fractionated" & medium == "lys" ~ "Fractionated: lysate",
-    fraction == "fractionated" & medium == "srm" ~ "Fractionated: acetate",
+    fraction == "fractionated" & medium == "ace" ~ "Fractionated: acetate",
     fraction == "non-fractionated" & medium == "lys" ~ "All cells: lysate",
-    fraction == "non-fractionated" & medium == "srm" ~ "All cells: acetate",
+    fraction == "non-fractionated" & medium == "ace" ~ "All cells: acetate",
   )) %>%
    # Call the plot
   ggplot(aes(
@@ -1356,6 +1445,8 @@ p3 <- seqtab %>%
     legend.margin = margin(t = -10)
   )
 ```
+
+
 ```{r, fig.width=18/2.53}
 p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,2,1)) + 
   plot_annotation(tag_levels = "a") & theme(
@@ -1372,7 +1463,7 @@ p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,
 
 
 ```{r}
-ggsave(filename = "oversight.pdf", width = 180, height = 180, units = "mm")
+ggsave(filename = "figures/fig-s2.pdf", width = 180, height = 180, units = "mm")
 ```
 
 
@@ -1570,8 +1661,8 @@ mw <- mw %>%
   pathway == "Organic carbon oxidation - complex carbon degradation" ~ "01: Organic C oxidation: complex C",
   pathway == "Organic carbon oxidation - amino acid utilization" ~ "02: Organic C oxidation: AA utilization",
   pathway == "Organic carbon oxidation - aromatics degradation" ~ "03: Organic C oxidation: aromatics",
-  pathway == "Organic carbon oxidation - methanol oxidation" ~ "04: Organic carbon oxidation: methanol oxidation",
-  pathway == "Organic carbon oxidation - fatty acid degradation" ~ "05: Organic C oxidation: fatty acid degradation",
+  pathway == "Organic carbon oxidation - methanol oxidation" ~ "04: Organic C: methanol oxidation",
+  pathway == "Organic carbon oxidation - fatty acid degradation" ~ "05: Organic C: fatty acid degradation",
   pathway == "Carbon fixation - CBB cycle (Rubisco)" ~ "06: C fixation: CBB cycle",
   pathway == "Carbon fixation - Reverse TCA cycle" ~ "07: C fixation: Reverse TCA",
   pathway == "Carbon fixation - 3HP/4HB" ~ "08: C fixation: 3HP/4HB",
@@ -1643,9 +1734,10 @@ p1 <- bintax %>%
   labs(x = "", y = "", fill = "") +
   scale_fill_manual(values = cols.phylum, guide = "none") +
   scale_x_discrete(position = "top") + 
-  theme_tidy() +
-  coord_equal() +
+  theme_tidy(fontsize = 6) +
+  coord_fixed() +
   theme(
+    aspect.ratio = 1/28,
     legend.position = "left",
     legend.key.height = unit(3, "mm"),
     legend.key.width = unit(3, "mm"),
@@ -1653,8 +1745,10 @@ p1 <- bintax %>%
     axis.ticks.y = element_blank(),
     axis.text.x = element_text(angle = 90, hjust = 0),
     axis.text.y = element_blank(),
-    panel.border = element_rect(linewidth = 1,fill = NA)
+    panel.border = element_rect(linewidth = 0.75,fill = NA)
   )
+
+p1
 ```
 
 
@@ -1684,7 +1778,7 @@ p2 <- mw %>%
     label
     )) +
   geom_point(aes(size = mw), shape = 21, stroke = 0.5, fill = "white") +
-  theme_tidy() +
+  theme_tidy(fontsize = 6) +
   geom_vline(xintercept = 7.5, linewidth = 0.2) +
   geom_vline(xintercept = 13.5, linewidth = 0.2) +
   geom_vline(xintercept = 19.5, linewidth = 0.2) +
@@ -1698,8 +1792,11 @@ p2 <- mw %>%
     panel.border = element_rect(linewidth = 0.75, fill = NA),
     axis.ticks = element_blank(),
     axis.text.x = element_blank(),
-    panel.grid.major = element_blank()
+    panel.grid.major = element_blank(),
+    legend.margin = margin(t = -10)
   )
+
+p2
 ```
 
 
@@ -1708,12 +1805,12 @@ library(patchwork)
 
 p1 / p2 & theme(
   legend.box.margin = margin(l = -8),
-  plot.margin = margin(b = 2),
+  plot.margin = margin(b = 2, r = 1),
   legend.key.width = unit(2, "mm"),
   legend.text = element_text(margin = margin(l = 2))
   )
 ```
 
 ```{r export plot metabolic weight}
-ggsave("figures/fig-x.pdf", width = 18, height = 18, units = "cm")
+ggsave("figures/fig-x.pdf", width = 140, height = 148, units = "mm")
 ```
