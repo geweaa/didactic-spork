@@ -10,7 +10,7 @@ number_sections: true
 theme: sandstone
 mainfont: Helvetica
 monofont: AndaleMono
-fontsize: "9"
+fontsize: "8"
 highlight: textmate
 df_print: paged
 code-fold: true
@@ -34,9 +34,8 @@ other-links:
 #| cache: false
 
 source("../../Protocols/theme.R")
-knitr::opts_chunk$set(echo = TRUE, cache = TRUE, fig.path = 'figures/')
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 ```
-
 
 ```{r}
 #| label: libraries
@@ -47,7 +46,6 @@ library(tidyverse)
 library(patchwork)
 library(grateful)
 ```
-
 
 ```{r}
 #| label: cite-packages
@@ -61,7 +59,7 @@ cite_packages(output = "table", pkgs = "Session", out.dir = getwd())
 
 The 16S ribosomal RNA data is from several sequencing projects. In chronological order, P15009 contains the groundwater samples from t0 (sampled Oct 2019), while P21015 contains the samples from t24 (sampled Feb 2020) from identical groundwaters. P21015 contains the sequencing libraries from the cultures as part of the inital experiment (one meteoric groundwater), while P26201 contains the libraries from the cultures as part of the follow-up experiment (using three groundwaters as inoculum).
 
-All 16S libraries were processed with the bioinformatic pipeline nf-core/ampliseq (v2.12.0), using the SBDI-GTDB (R09-RS220-1) as a reference. 
+All 16S libraries were processed with the bioinformatic pipeline nf-core/ampliseq (v2.12.0), using the SBDI-GTDB (R09-RS220-1) as a reference.
 
 ```{r read amplicon files}
 seqtab <- read_tsv("data/ASV_table.tsv.gz", col_types = cols(.default = col_character(), 
@@ -76,9 +74,7 @@ smd <- read_tsv("data/smd.tsv", col_types = cols(.default = col_character())) %>
   filter(fraction != "control")
 ```
 
-
 This project includes 15 metagenomes from 15 unique cultures. The metagenomes contain 35 de-replicated metagenome-assembled genomes (MAG) that are affiliated with the Bacillota (7), Desulfobacterota (7), Pseudomonadota (6), Bacteroidota (4), Patescibacteria (3), Nanoarchaeota (2), Acidobacteriota (1), Campylobacterota (1), Chloroflexota (1), Iainarchaeota (1), Spirochaetota (1), and Verrucomicrobiota (1).
-
 
 ![sampling-site](figures/äspö-mod.png){#fig-äspö}
 
@@ -95,7 +91,6 @@ quality <- read_tsv("data/quality_report.tsv", show_col_types = F) %>%
   rename(genome = name) %>%
   filter(genome %in% coverm$genome)
 ```
-
 
 ```{r define colours}
 cols.gw <- c(
@@ -186,14 +181,12 @@ rare %>%
   )
 ```
 
+
 ```{r}
 ggsave(filename = "figures/fig-s1.pdf", width = 100, height = 80, units = "mm")
 ```
 
-
-
 ## Redundancy analysis
-
 
 ```{r plot sampling site}
 site <- magick::image_read("figures/äspö-mod.png")
@@ -209,7 +202,6 @@ p1 <- ggplot() +
 
 As the hydrochemistry data is from a monitoring program, the sampling data closest to groundwater sampling was selected. All units are mg l-1, except for EC (mS m-1), pH, T (degrees C), and O18 (ppt SMOW)
 
-
 ```{r read hydrochemistry}
 chem <- read_tsv("data/sicada.txt", show_col_types = FALSE) %>% 
   rename_with(tolower) %>% 
@@ -217,7 +209,6 @@ chem <- read_tsv("data/sicada.txt", show_col_types = FALSE) %>%
   select(groundwater = idcode, so4, feii, ph_lab, ec_lab, temp_w, doc, nh4_n, o18, s34_so4) %>%
   inner_join(smd[,c("sample","groundwater")], by = "groundwater")
 ```
-
 
 The number of ASVs per sample are estimated with the specnumber() function from the Vegan library.
 
@@ -233,7 +224,6 @@ adiv <- seqtab %>%
 chem <- adiv %>% # Add the species richness for each sample
   inner_join(chem, by = "sample") 
 ```
-
 
 In order to run the RDA, the absolute counts are standardized using a Hellinger transformation (square root of the relative abundance).
 
@@ -253,8 +243,7 @@ m <- hellinger %>% # Create a matrix
   column_to_rownames("sample")
 ```
 
-
-The RDA is called while providing a large number of constraining factors, as the RDA function will by default not include redundant variables (Pearson r > 0.9).
+The RDA is called while providing a large number of constraining factors, as the RDA function will by default not include redundant variables (Pearson r \> 0.9).
 
 ```{r rda}
 set.seed(999)
@@ -283,8 +272,6 @@ lab <- tibble(factor = c("o18", "doc"),
 summary(rda)
 vegan::RsquareAdj(rda)
 ```
-
-
 
 ```{r rda-plot, fig.width = 12/2.53}
 #| label: rda-plot
@@ -351,14 +338,12 @@ t <- seqtab %>%
 t %>% arrange(desc(mean_relab)) %>% knitr::kable()
 ```
 
-
 ```{r}
 taxref <- tax %>%
   left_join(t %>% transmute(phylum, topphylum = phylum), by = "phylum") %>%
   mutate(topphylum = if_else(is.na(phylum), "Unidentified", topphylum)) %>%
   replace_na(list("topphylum" = "Other"))
 ```
-
 
 ```{r plot environmental communities (t0)}
 #| fig-cap: Community composition of the groundwater samples (t0) for each groundwater type (n = 6) before (October 2019) and after (April 2020) collection of groundwater for inoculation. The eight most abundant phyla are shown, grouping less abundant phyla as "Other" and uncharacterized ASVs as "Unidentified".
@@ -428,7 +413,6 @@ adiv %>% filter(sample %in% t0) %>%
   summarise(mean = round(mean(shannon), digits = 2), sd = round(sd(shannon), digits = 2), n = n())
 ```
 
-
 ```{r plot alpha diversity, fig.width = 10/2.53}
 p4 <- adiv %>%
   filter(fraction != "control") %>%
@@ -452,7 +436,6 @@ p4 <- adiv %>%
     legend.text = element_text(margin = margin(l = 1))
   )
 ```
-
 
 ```{r fig.width=18/2.53, fig.width=18/2.53}
 p1 + p2 + p3 + p4 + plot_layout(nrow = 2) + plot_annotation(tag_levels = "a") & 
@@ -501,7 +484,6 @@ cols.rank <- c( # Sorted on abundance
   "Sulfuricurvum" = "#046C9A"
 )
 ```
-
 
 ```{r}
 seqtab %>%
@@ -553,9 +535,6 @@ seqtab %>%
 ggsave(filename = "figures/fig-s2.pdf", width = 120, height = 90, units = "mm")
 ```
 
-
-
-
 ## Network analysis: phylum
 
 ```{r read network data}
@@ -596,7 +575,6 @@ p1 <- network.survey %>%
     strip.background = element_rect(fill = "#F0F0F0")
   )
 ```
-
 
 ```{r prepare data for network}
 t <- c(
@@ -653,7 +631,6 @@ p2 <- network %>%
   )
 ```
 
-
 ```{r plot network analysis with patchwork, fig.width=14/2.53, fig.height=16/2.53}
 p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
   panel.border = element_rect(fill = "transparent", linewidth = 0.5),
@@ -666,11 +643,9 @@ p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
 )
 ```
 
-
 ```{r}
 ggsave("figures/fig-6.pdf", width = 160, height = 160, units = "mm")
 ```
-
 
 ## Network analysis: order
 
@@ -831,7 +806,7 @@ p1 / p2 +
 ```
 
 ```{r export network analysis}
-ggsave("figures/fig-s4.pdf", width = 140, height = 160, units = "mm")
+ggsave("figures/fig-s5.pdf", width = 140, height = 160, units = "mm")
 ```
 
 # 16S data cultures
@@ -853,7 +828,6 @@ vegan::scores(nmds)$sites %>%
   rownames_to_column("sample") %>%
   inner_join(smd, by = "sample") -> nmds.scores
 ```
-
 
 ```{r plot nmds on amplicon data, fig.height=14/2.53}
 i <- data.frame(x0 = -1,52, y0 = 0.5, 0.5)
@@ -892,6 +866,8 @@ p1 <- nmds.scores %>%
     legend.text = element_text(margin = margin(l = 2, r = 8, unit = "pt")),
     legend.key.spacing.x = unit(0, "mm")
     )
+
+p1
 ```
 
 ## Barplot KR0015 (Fig 3)
@@ -912,7 +888,6 @@ t <- seqtab %>%
 # The most abundant phyla, averaged over all cultures
 t %>% arrange(desc(mean_relab))
 ```
-
 
 ```{r add selection to taxonomy table, message=FALSE, warning=FALSE}
 taxref <- tax %>%
@@ -973,7 +948,6 @@ p2 <- seqtab %>%
     )
 ```
 
-
 ```{r}
 p1 + p2 + plot_annotation(tag_levels = "a") & theme(
   plot.tag.location = "plot",
@@ -983,13 +957,9 @@ p1 + p2 + plot_annotation(tag_levels = "a") & theme(
 )
 ```
 
-
-
-
 ```{r export area plot}
 ggsave("figures/fig-3.pdf", height = 11, width = 18, units = "cm")
 ```
-
 
 ## NMDS cultures three groundwaters (Fig S3)
 
@@ -1045,7 +1015,6 @@ p1 <- nmds.scores %>%
     )
 ```
 
-
 ```{r extract nmds coordinates filtered}
 set.seed(999)
 
@@ -1061,7 +1030,6 @@ vegan::scores(nmds)$sites %>%
   rownames_to_column("sample") %>%
   inner_join(smd, by = "sample") -> nmds.scores
 ```
-
 
 ```{r plot nmds filtered}
 p2 <- nmds.scores %>%
@@ -1138,7 +1106,6 @@ p3 <- nmds.scores %>%
   )
 ```
 
-
 ```{r plot nmds patchwork}
 #| out-width: 100%
 
@@ -1153,9 +1120,8 @@ p1 + p2 + p3 + plot_layout(nrow = 1, guides = "collect") + plot_annotation(tag_l
 ```
 
 ```{r}
-ggsave("figures/fig-s2.pdf", height = 90, width = 180, units = "mm")
+ggsave("figures/fig-s3.pdf", height = 90, width = 180, units = "mm")
 ```
-
 
 ## QPCR KR0015 (Fig 2)
 
@@ -1167,7 +1133,6 @@ qpcr <- read_tsv('data/qpcr.tsv', col_types = cols(.default = col_character(),
          ) %>% mutate(medium = gsub("ace","srm", medium)) %>%
   rename(kingdom = Kingdom)
 ```
-
 
 ```{r plot qpcr, fig.width = 12/2.54}
 p1 <- qpcr %>%
@@ -1186,7 +1151,7 @@ p1 <- qpcr %>%
   facet_wrap(~ factor(kingdom, levels = c("Bacteria", "Archaea"))) +
   geom_pointrange(aes(ymin = mean - sd, 
                       ymax = mean + sd), 
-                  shape = 21, stroke = 0.5) +
+                  size = 3, shape = 21, stroke = 0.5,fatten = 1) +
   labs(x = 'Week', y = expression("Gene copy number (mL"^"-1"*")")) +
   scale_y_log10(breaks = c(1e3,1e4,1e5,1e6,1e7), 
                 labels = c(expression("10"^"3"),
@@ -1196,10 +1161,10 @@ p1 <- qpcr %>%
                            expression("10"^"7")
                            )
                 ) +
-  scale_linetype(name = "Medium:", labels = c("Acetate", "Cell lysate")) +
+  scale_linetype(name = "Medium:", labels = c("Acetate", "Cell lysate"), guide = "none") +
   scale_fill_manual(values = cols.fraction, 
                     labels = c("< 0.45 µm fraction", "Non-fractionated"),
-                    name = "") +
+                    name = "", guide = "none") +
   theme_tidy(legend = "right") +
   theme(
     plot.margin = margin(),
@@ -1240,7 +1205,6 @@ counts <- tibble(
   )
 ```
 
-
 ```{r plot microscopy meteoric}
 #| fig-cap: Cell counts of enrichment cultures according to fluorescence microscopy. Each line represents the cell density of a single culture and the black horizontal line denotes the mean cell count of the groundwater at t0 (n = 2).
 #| label: fig-microscopy
@@ -1253,7 +1217,7 @@ p2 <- growth %>%
   ggplot(aes(x = week, y = count, fill = fraction)) +
   geom_rect(data = counts, aes(xmin = 1, xmax = 17, ymin = min, ymax = max), fill = "#8D8680", alpha = 0.5, inherit.aes = FALSE) +
   geom_line(aes(linetype = medium)) + 
-  geom_point(aes(fill = fraction), shape = 21, stroke = 0.5, size = 2) +
+  geom_point(aes(fill = fraction), shape = 21, stroke = 0.5, size = 3) +
   scale_y_log10(limits = c(1e4,1e8),
                 breaks = c(1e4,1e5,1e6,1e7),
                 labels = c(expression("10"^"4"),
@@ -1263,10 +1227,10 @@ p2 <- growth %>%
                 ) +
   scale_x_continuous(breaks = c(1,5,7,9,12,15,17), 
                      labels = c("1", "5", "", "9", "12", "", "17")) +
-  scale_fill_manual(values = cols.fraction, guide = "none") +
-  scale_linetype_manual(values = c("srm" = 1, "lys" = 2), name = "Medium:", 
-                 labels = c("Acetate", "Cell lysate"), 
-                 guide = "none") +
+  scale_fill_manual(values = cols.fraction, 
+                    labels = c("< 0.45 µm fraction", "Non-fractionated"),
+                    name = "") +
+  scale_linetype(name = "Medium:", labels = c("Acetate", "Cell lysate")) +
   facet_wrap(~ factor(label, levels = c("Meteoric", "Marine", "Saline")), ncol = 3) +
   labs(x = "Week", y = expression("Cell number (mL"^"-1"*")"), colour = "Fraction:") +
   theme_tidy(legend = "bottom") + 
@@ -1277,8 +1241,6 @@ p2 <- growth %>%
     )
 ```
 
-
-
 ```{r}
 #| out-width: 100%
 
@@ -1288,10 +1250,10 @@ p1 + p2 + plot_layout(nrow = 2, heights = c(3,2), guides = "collect") + plot_ann
   legend.position = "bottom",
   plot.tag.location = "plot",
   plot.tag.position = c(0.04, 0.96),
-  legend.box.margin = margin(t = -8)
+  legend.box.margin = margin(t = -4),
+  legend.text = element_text(margin = margin(l = 0))
   )
 ```
-
 
 ```{r export qpcr}
 ggsave(filename = "figures/fig-2.pdf", width = 14, height = 14, units = "cm")
@@ -1312,7 +1274,6 @@ t <- seqtab %>%
   top_n(8, mean_relab) %>% arrange(desc(mean_relab)) %>% pull(phylum)
 ```
 
-
 ```{r}
 cols.phylum <- c(
   "Pseudomonadota" = "#972D15",
@@ -1330,7 +1291,6 @@ cols.phylum <- c(
   "Other" = "#899DA4"
 )
 ```
-
 
 ```{r}
 p1 <- seqtab %>%
@@ -1380,7 +1340,6 @@ t <- seqtab %>%
   top_n(8, mean_relab) %>% arrange(desc(mean_relab)) %>% pull(phylum)
 ```
 
-
 ```{r}
 p2 <- seqtab %>%
   filter(grepl("P26", sample)) %>%
@@ -1416,7 +1375,6 @@ p2 <- seqtab %>%
   )
 ```
 
-
 ```{r}
 t <- seqtab %>%
   inner_join(smd, by = "sample") %>% filter(groundwater == "SA2600") %>%
@@ -1429,7 +1387,6 @@ t <- seqtab %>%
   summarise(mean_relab = sum(relab), .groups = 'drop') %>%
   top_n(8, mean_relab) %>% arrange(desc(mean_relab)) %>% pull(phylum)
 ```
-
 
 ```{r}
 p3 <- seqtab %>%
@@ -1466,7 +1423,6 @@ p3 <- seqtab %>%
   )
 ```
 
-
 ```{r, fig.width=18/2.53}
 p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,2,1)) + 
   plot_annotation(tag_levels = "a") & theme(
@@ -1481,15 +1437,11 @@ p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,
 )
 ```
 
-
 ```{r}
-ggsave(filename = "figures/fig-s3.pdf", width = 180, height = 180, units = "mm")
+ggsave(filename = "figures/fig-s4.pdf", width = 180, height = 180, units = "mm")
 ```
 
-
-
 # Genome-resolved metagenomics
-
 
 ## Basic stats on the MAGs
 
@@ -1519,7 +1471,7 @@ p1 <- i %>%
     fill = phylum
     )) +
   geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#d9d9d9", se = TRUE, linewidth = 0.4) +
-  geom_point(size = 2.5, shape = 21, stroke = 0.5, key_glyph = "rect") + 
+  geom_point(size = 3, shape = 21, stroke = 0.5, key_glyph = "rect") + 
   labs(x = "Estimated genome size (Mb)", y = "Estimated GC content (%)", color = "") +
   scale_colour_manual(values = cols.mag, guide = "none") +
   scale_fill_manual(values = alpha(cols.mag, alpha = 0.5)) +
@@ -1575,7 +1527,7 @@ p3 <- i %>%
     fill = phylum
     )) +
   geom_smooth(method = "lm", formula = y ~ x, colour = "black", fill = "#d9d9d9", se = TRUE, linewidth = 0.4) +
-  geom_point(size = 2.5, shape = 21, stroke = 0.5) + 
+  geom_point(size = 3, shape = 21, stroke = 0.5) + 
   labs(x = "Estimated genome size (Mb)", y = "Estimated coding density", color = "") +
   scale_colour_manual(values = cols.mag, guide = "none") +
   scale_fill_manual(values = alpha(cols.mag, alpha = 0.5), guide = "none") +
@@ -1643,7 +1595,7 @@ p4 <- nmds.scores %>%
 p1 + p2 + p3 + p4 + plot_layout(guides = "collect", nrow = 2) & plot_annotation(tag_levels = c("a", "b", "c", "d")) &
   theme(
     aspect.ratio = 1.0,
-    plot.margin = margin(),
+    plot.margin = margin(r = 1),
     plot.tag.location = "panel",
     plot.tag.position = c(0.04, 0.95),
     legend.position = "bottom",
@@ -1701,8 +1653,8 @@ km <- km %>% mutate(label = case_when(
     module == "M00004" ~ "M00004: Pentose phosphate pathway (PPP)",
     module == "M00007" ~ "M00007: PPP, non-oxidative",
     module == "M00082" ~ "M00082: Fatty acids biosynthesis",
-    module == "M00549" ~ "M00549: UDP-Glc biosynthesis",
-    module == "M00909" ~ "M00909: UDP-GlcNAc biosynthesis",
+    #module == "M00549" ~ "M00549: UDP-Glc biosynthesis",
+    #module == "M00909" ~ "M00909: UDP-GlcNAc biosynthesis",
     #module == "M00020" ~ "M00020: AA biosynthesis: serine",
     module == "M00016" ~ "M00016: AA biosynthesis: lysine",
     module == "M00021" ~ "M00021: AA biosynthesis: cysteine",
@@ -1711,20 +1663,30 @@ km <- km %>% mutate(label = case_when(
     #module == "M00048" ~ "M00048: De novo purine biosynthesis",
     module == "M00053" ~ "M00053: Deoxyribonucleotide biosynthesis",
     #module == "M00051" ~ "M00051: De novo pyrimidine biosynthesis",
-    module == "M00052" ~ "M00052: Pyrimidine ribonucleotide biosynthesis",
+    module == "M00052" ~ "M00052: Ribonucleotide biosynthesis",
     .default = NA
   ))
+
+t <- tibble(
+  x = c(0.5, 7.55, 13.55, 20.55, 23.55, 25.55, 26.55, 27.55, 28.55),
+  xend = c(7.45, 13.45, 20.45, 23.45, 25.45, 26.45, 27.45, 28.45, 29.45),
+  y = rep(14.3, 9), 
+  yend = rep(14.3, 9),
+  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanoarchaeota",
+             "Chloroflexota","Spirochaetota","Campylobacterota","Iainarchaeota")
+  ) %>%
+  mutate(phylum = factor(phylum, names(cols.phylum)))
 
 cols.phylum <- c(
   "Desulfobacterota" = "#A2A475",
   "Pseudomonadota" = "#972D15",
   "Bacillota" = "#1B5331",
   "Patescibacteria" = "#C7B19C",
-  "Nanoarchaeota" = "#00A08A",  
+  "Nanoarchaeota" = "#046C9A",
   "Chloroflexota" = "#D69C4E",
   "Spirochaetota" = "#D8B70A",
   "Campylobacterota" = "#FAEFD1",
-  "Iainarchaeota" = "#046C9A"
+  "Iainarchaeota" = "#00A08A"
 )
 
 name <- bintax %>%
@@ -1740,12 +1702,22 @@ name <- bintax %>%
 ```{r}
 #| fig-width: 18 
 
+d <- quality %>% inner_join(bintax, by = "genome") %>%
+  mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
+  mutate(taxon = if_else(is.na(species), paste(genus, "sp."), species)) %>%
+  mutate(taxon = factor(taxon, levels = name)) %>% filter(!is.na(taxon)) %>%
+  select(taxon, completeness) %>% arrange(taxon) %>%
+  mutate(x = seq(1,29, by = 1)) %>%
+  mutate(y = rep(13.8, 29))
+
 p1 <- km %>%
   inner_join(bintax, by = "genome") %>%
   mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
   mutate(taxon = if_else(is.na(species), paste(genus, "sp."), species)) %>%
   mutate(taxon = factor(taxon, levels = name)) %>%
   filter(!is.na(label)) %>%
+  # Add genome completeness
+  inner_join(quality, by = "genome") %>%
   ggplot(aes(
     x = taxon,
     y = fct_rev(label),
@@ -1760,34 +1732,29 @@ p1 <- km %>%
                               "i" = "One block missing",
                               "m" = "Incomplete or missing"),
                     name = "Module completeness:") +
-  theme_tidy(fontsize = 6) + coord_fixed() +
+  theme_tidy(fontsize = 5) + coord_fixed() +
+  geom_text(data = d, aes(x = x, y = y, label = round(completeness, digits = 0)), inherit.aes = FALSE, size = 5/.pt) +
   geom_vline(xintercept =  7.5, linewidth = 0.6, color = "white") +
   geom_vline(xintercept = 13.5, linewidth = 0.6, color = "white") +
-  geom_vline(xintercept = 19.5, linewidth = 0.6, color = "white") +
-  geom_vline(xintercept = 22.5, linewidth = 0.6, color = "white") +
-  geom_vline(xintercept = 24.5, linewidth = 0.6, color = "white") +
-  annotate("segment", x =    0.5, xend = 7.45, y = 16, yend = 16, color = "#A2A475", linewidth = 2) +
-  annotate("segment", x =  7.55, xend = 13.45, y = 16, yend = 16, color = "#972D15", linewidth = 2) +
-  annotate("segment", x = 13.55, xend = 19.45, y = 16, yend = 16, color = "#1B5331", linewidth = 2) +
-  annotate("segment", x = 19.55, xend = 22.45, y = 16, yend = 16, color = "#C7B19C", linewidth = 2) +
-  annotate("segment", x = 22.55, xend = 24.45, y = 16, yend = 16, color = "#00A08A", linewidth = 2) +
-  annotate("segment", x = 24.55, xend = 25.45, y = 16, yend = 16, color = "#D69C4E", linewidth = 2) +
-  annotate("segment", x = 25.55, xend = 26.45, y = 16, yend = 16, color = "#D8B70A", linewidth = 2) +
-  annotate("segment", x = 26.55, xend = 27.45, y = 16, yend = 16, color = "#FAEFD1", linewidth = 2) +
-  annotate("segment", x = 27.55, xend = 28.45, y = 16, yend = 16, color = "#046C9A", linewidth = 2) +
+  geom_vline(xintercept = 20.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 23.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 25.5, linewidth = 0.6, color = "white") +
+  geom_segment(data = t, aes(x = x, xend = xend, y = y, yend = yend, color = phylum), linewidth = 2, inherit.aes = FALSE) +
+  scale_color_manual(values = cols.phylum, guide = "none") +
   theme(
     legend.position = "bottom",
-    legend.key.height = unit(3, "mm"),
+    legend.key.height = unit(3, "mm"), legend.key.width = unit(2, "mm"),
     legend.text = element_text(margin = margin(l = 2)),
     legend.margin = margin(t = -10),
-    axis.text.x.top = element_text(angle = 90, hjust = 0, vjust = 0.6),
+    axis.text.x.top = element_text(angle = 90, hjust = 0, vjust = 0.6, size = 5),
     axis.ticks = element_blank(),
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
     panel.border = element_blank()
   )
-```
 
+p1
+```
 
 ## Metabolic weight
 
@@ -1836,21 +1803,10 @@ d <- c(
   "N fixation: nifDK, nifH",
   "Sulfur oxidation: sdo",
   "Sulfate reduction",
-  "Sulfide oxidation: sqr",
-  "Iron oxidation",
-  "Iron reduction"
+  "Sulfide oxidation: sqr"
+  #"Iron oxidation",
+  #"Iron reduction"
 ) %>% rev()
-
-cols.phylum <- c(
-  "Desulfobacterota" = "#A2A475",
-  "Pseudomonadota" = "#972D15",
-  "Bacillota" = "#1B5331",
-  "Patescibacteria" = "#C7B19C",
-  "Nanoarchaeota" = "#00A08A",  
-  "Chloroflexota" = "#D69C4E",
-  "Spirochaetota" = "#D8B70A",
-  "Campylobacterota" = "#FAEFD1",
-  "Iainarchaeota" = "#046C9A")
 ```
 
 
@@ -1866,6 +1822,16 @@ name <- bintax %>%
 
 
 ```{r}
+t <- tibble(
+  x = c(0.5, 7.55, 13.55, 20.55, 23.55, 25.55, 26.55, 27.55, 28.55),
+  xend = c(7.45, 13.45, 20.45, 23.45, 25.45, 26.45, 27.45, 28.45, 29.45),
+  y = rep(14.8, 9), 
+  yend = rep(14.8, 9),
+  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanoarchaeota",
+             "Chloroflexota","Spirochaetota","Campylobacterota","Iainarchaeota")
+  ) %>%
+  mutate(phylum = factor(phylum, names(cols.phylum)))
+
 p2 <- mw %>%
   inner_join(bintax, by = "genome") %>%
   mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
@@ -1884,25 +1850,95 @@ p2 <- mw %>%
     fill = score
     )) +
   geom_tile(color = "white") +
-  scale_fill_manual(values = c("c" = "#707151",
-                               "m" = "#F0F1EB"),
-                    label = c("c" = "Present",
-                              "m" = "Absent")) +
-  theme_tidy(fontsize = 6) + coord_fixed() +
+  scale_fill_manual(
+    values = c("c" = "#707151", "m" = "#F0F1EB"),
+    label = c("c" = "Present", "m" = "Absent"), 
+    guide = "none") +
+  theme_tidy(fontsize = 5) + coord_fixed() +
   geom_vline(xintercept =  7.5, linewidth = 0.6, color = "white") +
   geom_vline(xintercept = 13.5, linewidth = 0.6, color = "white") +
-  geom_vline(xintercept = 19.5, linewidth = 0.6, color = "white") +
-  geom_vline(xintercept = 22.5, linewidth = 0.6, color = "white") +
-  geom_vline(xintercept = 24.5, linewidth = 0.6, color = "white") +
-  annotate("segment", x =   0.5, xend =  7.45, y = 17, yend = 17, color = "#A2A475", linewidth = 2) +
-  annotate("segment", x =  7.55, xend = 13.45, y = 17, yend = 17, color = "#972D15", linewidth = 2) +
-  annotate("segment", x = 13.55, xend = 19.45, y = 17, yend = 17, color = "#1B5331", linewidth = 2) +
-  annotate("segment", x = 19.55, xend = 22.45, y = 17, yend = 17, color = "#C7B19C", linewidth = 2) +
-  annotate("segment", x = 22.55, xend = 24.45, y = 17, yend = 17, color = "#00A08A", linewidth = 2) +
-  annotate("segment", x = 24.55, xend = 25.45, y = 17, yend = 17, color = "#D69C4E", linewidth = 2) +
-  annotate("segment", x = 25.55, xend = 26.45, y = 17, yend = 17, color = "#D8B70A", linewidth = 2) +
-  annotate("segment", x = 26.55, xend = 27.45, y = 17, yend = 17, color = "#FAEFD1", linewidth = 2) +
-  annotate("segment", x = 27.55, xend = 28.45, y = 17, yend = 17, color = "#046C9A", linewidth = 2) +
+  geom_vline(xintercept = 20.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 23.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 25.5, linewidth = 0.6, color = "white") +
+  geom_segment(data = t, aes(x = x, xend = xend, y = y, yend = yend, color = phylum), linewidth = 2, inherit.aes = FALSE) +
+  scale_color_manual(values = cols.phylum) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.spacing.x = unit(0, "mm"),
+    legend.box.margin = margin(),
+    panel.border = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.x = element_blank(),
+    legend.margin = margin(t = -10),
+    legend.key.width = unit(4, "mm"),
+    legend.key.height = unit(3, "mm"),
+    legend.text = element_text(margin = margin(l = 2))
+  )
+
+p2
+```
+
+
+
+## Aerobic respiration
+
+```{r}
+i <- emapper %>% mutate(gene = case_when(
+  grepl("1.6.5.3", ec) ~ "NADH:ubiquinone oxidoreductase",
+  grepl("1.2.5.3", ec) ~ "Aerobic CO dehydrogenase",
+  grepl("1.9.3.1", ec) ~ "Cytochrome c oxidase",
+  grepl("3.6.3.14", ec) ~ "F-type H+/Na+-transporting ATPase",
+  .default = "Other"
+  )) %>%
+  group_by(genome, gene) %>% summarise(n = n(), .groups = "drop") %>%  
+  pivot_wider(names_from = "gene", values_from = "n", values_fill = 0) %>%
+  pivot_longer(-1, names_to = "gene", values_to = "n")
+```
+
+
+```{r}
+t <- tibble(
+  x = c(0.5, 7.55, 13.55, 20.55, 23.55, 25.55, 26.55, 27.55, 28.55),
+  xend = c(7.45, 13.45, 20.45, 23.45, 25.45, 26.45, 27.45, 28.45, 29.45),
+  y = rep(4.8, 9), 
+  yend = rep(4.8, 9),
+  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanoarchaeota",
+             "Chloroflexota","Spirochaetota","Campylobacterota","Iainarchaeota")
+  ) %>%
+  mutate(phylum = factor(phylum, names(cols.phylum)))
+
+p3 <- i %>%
+  inner_join(bintax, by = "genome") %>%
+  mutate(genus = case_match(genus, NA ~ family, .default = genus)) %>%
+  mutate(taxon = if_else(is.na(species), paste(genus, "sp."), species)) %>%
+  # Order the genomes
+  filter(taxon %in% name) %>%
+  mutate(taxon = factor(taxon, name)) %>%
+  mutate(n = if_else(n > 1, 1, n)) %>%
+  mutate(n = as.character(n)) %>%
+  filter(gene != "Other") %>%
+  # Plot
+  ggplot(aes(
+    x = taxon, 
+    y = gene,
+    fill = n
+    )) +
+  geom_tile(color = "white") +
+  scale_fill_manual(values = c("1" = "#707151",
+                               "0" = "#F0F1EB"),
+                    label = c("1" = "Present",
+                              "0" = "Absent")) +  
+  theme_tidy(fontsize = 5) + coord_fixed() + guides(fill = guide_legend(reverse = TRUE)) +
+  geom_vline(xintercept =  7.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 13.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 20.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 23.5, linewidth = 0.6, color = "white") +
+  geom_vline(xintercept = 25.5, linewidth = 0.6, color = "white") +
+  geom_segment(data = t, aes(x = x, xend = xend, y = y, yend = yend, color = phylum), linewidth = 2, inherit.aes = FALSE) +
+  scale_color_manual(values = cols.phylum, guide = "none") +
   theme(
     axis.title.x = element_blank(),
     axis.title.y = element_blank(),
@@ -1914,22 +1950,26 @@ p2 <- mw %>%
     axis.ticks = element_blank(),
     axis.text.x = element_blank(),
     legend.margin = margin(t = -10),
-    legend.key.height = unit(3, "mm")
+    legend.key.height = unit(3, "mm"), legend.key.width = unit(2, "mm"),
   )
+
+p3
 ```
-
-
-
 ```{r combine phylum and metabolic ouput}
-p1 / p2 + plot_annotation(tag_levels = 'a') & theme(
+#| fig-width: 18
+
+p1 / p2 / p3 + plot_annotation(tag_levels = 'a') & theme(
   legend.box.margin = margin(l = -8),
   plot.margin = margin(b = 6),
-  legend.key.width = unit(2, "mm"),
   legend.text = element_text(margin = margin(l = 2)),
   plot.tag.location = 'panel',
-  plot.tag.position = c(-0.05, 1.03)
+  plot.tag.position = c(-0.05, 1.03),
+  axis.text.y = element_text(size = 5, margin = margin(r = -1))
   )
 ```
+
+
+
 
 ```{r export plot metabolic weight}
 ggsave("figures/fig-5.pdf", width = 180, height = 180, units = "mm")
