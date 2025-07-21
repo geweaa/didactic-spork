@@ -34,7 +34,7 @@ other-links:
 #| cache: false
 
 source("../../Protocols/theme.R")
-knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, dpi = 40)
 ```
 
 ```{r}
@@ -67,16 +67,16 @@ seqtab <- read_tsv("data/ASV_table.tsv.gz", col_types = cols(.default = col_char
                                     )) %>%
   group_by(sample) %>% mutate(relab = count / sum(count)) %>% ungroup()
 
-tax <- read_tsv("data/ASV_tax.tsv.gz", col_types = cols(.default = col_character()))
+tax <- read_tsv("data/ASV_tax.tsv.gz", col_types = cols(.default = col_character())) %>%
+  mutate(phylum = if_else(phylum == "Nanoarchaeota", "Nanobdellota", phylum))
                
 smd <- read_tsv("data/smd.tsv", col_types = cols(.default = col_character())) %>%
   filter(!sample %in% c("P21015_1082","P21015_1083","P21015_1084","P21015_1087","P21015_1088","P21015_1089")) %>%
   filter(fraction != "control")
 ```
 
-This project includes 15 metagenomes from 15 unique cultures. The metagenomes contain 35 de-replicated metagenome-assembled genomes (MAG) that are affiliated with the Bacillota (7), Desulfobacterota (7), Pseudomonadota (6), Bacteroidota (4), Patescibacteria (3), Nanoarchaeota (2), Acidobacteriota (1), Campylobacterota (1), Chloroflexota (1), Iainarchaeota (1), Spirochaetota (1), and Verrucomicrobiota (1).
+This project includes 15 metagenomes from 15 unique cultures. The metagenomes contain 35 de-replicated metagenome-assembled genomes (MAG) that are affiliated with the Bacillota (7), Desulfobacterota (7), Pseudomonadota (6), Bacteroidota (4), Patescibacteria (3), Nanobdellota (2), Acidobacteriota (1), Campylobacterota (1), Chloroflexota (1), Iainarchaeota (1), Spirochaetota (1), and Verrucomicrobiota (1).
 
-![sampling-site](figures/äspö-mod.png){#fig-äspö}
 
 ```{r files metag}
 coverm <- read_tsv("data/coverm.tsv.gz", col_types = cols(.default = col_character(), tpm = col_double()))
@@ -84,7 +84,8 @@ coverm <- read_tsv("data/coverm.tsv.gz", col_types = cols(.default = col_charact
 emapper <- read_tsv("data/emapper.tsv.gz", show_col_types = FALSE) 
 
 # Sample 35 (l7f) was removed from the binning process as this sample did not produce any bins
-bintax <- read_tsv("data/gtdbtk.summary.tsv", col_types = cols(.default = col_character())) 
+bintax <- read_tsv("data/gtdbtk.summary.tsv", col_types = cols(.default = col_character())) %>%
+  mutate(phylum = if_else(phylum == "Nanoarchaeota", "Nanobdellota", phylum))
 
 quality <- read_tsv("data/quality_report.tsv", show_col_types = F) %>%
   rename_with(tolower) %>%
@@ -113,7 +114,7 @@ cols.fraction <- c(
 
 cols.mag <- c(
   "Other" = "#899DA4",
-  "Nanoarchaeota" = "#046C9A",
+  "Nanobdellota" = "#046C9A",
   "Patescibacteria" = "#C7B19C",
   "Pseudomonadota" = "#972D15",
   "Desulfobacterota" = "#A2A475",
@@ -160,7 +161,7 @@ rare <- seqtab %>%
 ```
 
 
-```{r plot the rarefaction}
+```{r}
 #| fig-cap: Rarefaction curves for the groundwater samples (t0) for each groundwater type (n = 6).
 #| label: fig-rarefaction
 #| out-width: 18cm
@@ -182,7 +183,7 @@ rare %>%
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 ggsave(filename = "figures/fig-s1.pdf", width = 100, height = 80, units = "mm")
 ```
 
@@ -273,7 +274,7 @@ summary(rda)
 vegan::RsquareAdj(rda)
 ```
 
-```{r rda-plot, fig.width = 12/2.53}
+```{r fig.width = 12/2.53}
 #| label: rda-plot
 #| fig-cap: Redundancy analysis (RDA) of the community composition using the hydrochemistry as constraining factors. The sequence counts were standardized using a Hellinger transformation before calculating the Euclidean distances. Showing only non-redunant variables by removing collinear factors. The ellipse (dotted line) depicts a 95 % compatibility interval.
 
@@ -345,7 +346,7 @@ taxref <- tax %>%
   replace_na(list("topphylum" = "Other"))
 ```
 
-```{r plot environmental communities (t0)}
+```{r}
 #| fig-cap: Community composition of the groundwater samples (t0) for each groundwater type (n = 6) before (October 2019) and after (April 2020) collection of groundwater for inoculation. The eight most abundant phyla are shown, grouping less abundant phyla as "Other" and uncharacterized ASVs as "Unidentified".
 #| label: fig-phyla
 #| out-width: 100%
@@ -447,7 +448,7 @@ p1 + p2 + p3 + p4 + plot_layout(nrow = 2) + plot_annotation(tag_levels = "a") &
     )
 ```
 
-```{r}
+```{r, eval=FALSE}
 #| label: export fig-1
 
 ggsave("figures/fig-1.pdf", width = 180, height = 180, units = "mm")
@@ -531,16 +532,18 @@ seqtab %>%
     )
 ```
 
-```{r}
+```{r, eval=FALSE}
 ggsave(filename = "figures/fig-s2.pdf", width = 120, height = 90, units = "mm")
 ```
 
 ## Network analysis: phylum
 
-```{r read network data}
+```{r}
+#| label: lm-groundwater
+
 t <- c(
   "Spirochaetota", "Acidobacteriota", "Atribacterota", "Chloroflexota",
-  "Omnitrophota", "Nanoarchaeota", "Campylobacterota", "Pseudomonadota"
+  "Omnitrophota", "Nanobdellota", "Campylobacterota", "Pseudomonadota"
 )
 
 network.survey <- read_tsv("data/network-survey.tsv", show_col_types = F)
@@ -555,7 +558,9 @@ for (i in t) {
 fit
 ```
 
-```{r plot network environmental}
+```{r}
+#| label: fig-lm-groundwater
+
 p1 <- network.survey %>%
   mutate(phylum = factor(phylum, levels = fit$phylum)) %>%
   ggplot(aes(
@@ -576,7 +581,9 @@ p1 <- network.survey %>%
   )
 ```
 
-```{r prepare data for network}
+```{r}
+#| label: lm-cultures
+
 t <- c(
   "Omnitrophota", "Chloroflexota", "Pseudomonadota", "Actinomycetota",
   "Verrucomicrobiota", "Acidobacteriota", "Bacillota", "Spirochaetota"
@@ -604,7 +611,9 @@ fit <- fit %>% arrange(desc(r.squared))
 fit
 ```
 
-```{r plot network cultures}
+```{r}
+#| label: fig-lm-cultures
+
 n <- network %>%
   group_by(phylum) %>% summarise(no = n(), .groups = "drop") %>%
   inner_join(fit, by = "phylum") %>% mutate(no = as.character(no)) %>%
@@ -631,7 +640,9 @@ p2 <- network %>%
   )
 ```
 
-```{r plot network analysis with patchwork, fig.width=14/2.53, fig.height=16/2.53}
+```{r fig.width=14/2.53, fig.height=16/2.53}
+#| label: fig-lm
+
 p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
   panel.border = element_rect(fill = "transparent", linewidth = 0.5),
   axis.ticks.length = unit(0.5, "mm"),
@@ -643,8 +654,10 @@ p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
 )
 ```
 
-```{r}
-ggsave("figures/fig-6.pdf", width = 160, height = 160, units = "mm")
+```{r, eval=FALSE}
+#| label: export-fig-lm
+
+ggsave("figures/fig-s5.pdf", width = 160, height = 160, units = "mm")
 ```
 
 ## Network analysis: order
@@ -652,7 +665,7 @@ ggsave("figures/fig-6.pdf", width = 160, height = 160, units = "mm")
 ```{r lm on amplicons from groundwater}
 t <- c(
   "Spirochaetota", "Acidobacteriota", "Atribacterota", "Chloroflexota",
-  "Omnitrophota", "Nanoarchaeota", "Campylobacterota", "Pseudomonadota"
+  "Omnitrophota", "Nanobdellota", "Campylobacterota", "Pseudomonadota"
 )
 
 # The file survey-amplicons.tsv contains the ASVs from Äspö groundwaters published in https://doi.org/10.3389/fmicb.2018.02880
@@ -805,9 +818,172 @@ p1 / p2 +
 )
 ```
 
-```{r export network analysis}
-ggsave("figures/fig-s5.pdf", width = 140, height = 160, units = "mm")
+```{r export network analysis, eval=FALSE}
+ggsave("figures/fig-s6.pdf", width = 140, height = 160, units = "mm")
 ```
+
+# Network analysis ASV
+
+
+```{r}
+#| label: prepare data for correlation
+
+
+cols.phylum <- c( # Sorted on abundance
+  "Patescibacteria" = "#C7B19C",
+  "Desulfobacterota" = "#A2A475",
+  "Nanobdellota" = "#046C9A",
+  "Omnitrophota" = "#00A08A",
+  "Chloroflexota" = "#D69C4E",
+  "Atribacterota" = "#972D15",
+  "Bacillota" = "#FAEFD1",
+  "Nitrospirota" = "#D8B70A",
+  "Campylobacterota" = "#1B5331",
+  "Bacteroidota" = "#899DA4"
+)
+s <- c(t0, unique(survey.amplicons$sample))
+
+d <- seqtab %>%
+  inner_join(tax, by = "seqid") %>%
+  # Add the data from groundwaters at Äspö HRL
+  rbind(survey.amplicons) %>% 
+  filter(phylum %in% names(cols.phylum)) %>%
+  select(seqid.y = seqid, sample, relab.y = relab) 
+
+d <- seqtab %>%
+  inner_join(tax, by = "seqid") %>%
+  rbind(survey.amplicons) %>%
+  filter(phylum %in% names(cols.phylum)) %>%
+  select(seqid, sample, relab) %>%
+  inner_join(d, by = "sample") %>%
+  # Minimum read count of 0.05 % 
+  filter(sample %in% s & relab > 0.005) 
+```
+
+```{r}
+#| label: correlation-groundwater
+
+cor <- tibble()
+
+for (x in unique(d$seqid)) {
+     n <- d %>% 
+       filter(seqid == x) %>%
+       group_by(seqid.y) %>% 
+       summarise(spearman = cor(relab, relab.y, method = "spearman"), n = n()) %>%
+       mutate(seqid = x) %>%
+       mutate(type = "Groundwaters") %>%
+       filter(!is.na(spearman) & n > 10 & spearman > 0)
+     cor <- rbind(cor, n)
+      }
+```
+
+
+```{r}
+#| label: data-correlation-cultures
+
+s <- smd %>%
+  filter(fraction == "non-fractionated") %>%
+  pull(sample)
+
+d <- seqtab %>%
+  inner_join(tax, by = "seqid") %>%
+  # Only use samples from non-fractionated cultures
+  filter(phylum %in% names(cols.phylum) & sample %in% s) %>%
+  select(seqid.y = seqid, sample, relab.y = relab) 
+
+# By running inner_join() on the samples, all combinations between seqid's are obtained
+d <- seqtab %>%
+  inner_join(tax, by = "seqid") %>%
+  filter(phylum %in% names(cols.phylum) & sample %in% s) %>%
+  select(seqid, sample, relab) %>%
+  inner_join(d, by = "sample") %>%
+  # Minimum read count of 0.1 % 
+  filter(sample %in% s & relab > 0.005) 
+```
+
+```{r}
+#| label: correlation-cultures
+
+for (x in unique(d$seqid)) {
+     n <- d %>% 
+       filter(seqid == x) %>%
+       group_by(seqid.y) %>% 
+       summarise(spearman = cor(relab, relab.y, method = "spearman"), n = n()) %>%
+       mutate(seqid = x) %>%
+       mutate(type = "Cultures") %>%
+       # n > 10 implies at least ten co-occurrences
+       filter(!is.na(spearman) & n > 3 & spearman > 0)
+     cor <- rbind(cor, n)
+      }
+```
+
+
+```{r}
+g <- cor %>% filter(spearman > 0.75) %>%
+  filter(seqid != seqid.y) %>%
+  rename(from = seqid, to = seqid.y) %>%
+  select(from, to, n, spearman, type)
+
+taxref <- survey.amplicons %>%
+  filter(!seqid %in% tax$seqid) %>%
+  select(-sample, -count, -relab) %>%
+  rbind(tax) %>%
+  distinct()
+
+# 'a' for attributes
+a <- g %>%
+  select(type, from, to) %>%
+  pivot_longer(-1, names_to = "relation", values_to = "seqid") %>%
+  select(-relation) %>%
+  left_join(taxref, by = "seqid") %>%
+  select(seqid, phylum, type) %>%
+  distinct(seqid, .keep_all = TRUE)
+
+g <- igraph::graph_from_data_frame(g, directed = FALSE, vertices = a)
+g <- tidygraph::as_tbl_graph(g)
+```
+
+
+
+```{r}
+library(ggraph)
+
+t <- data.frame(x = 0, y = 6, type = "Groundwaters",
+                label = "Patescibacteria: 127 nodes\nDesulfobacterota: 38\nNanobdellota: 38\nOmnitrophota: 17\nChloroflexota: 11\nAtribacterota: 6\nBacteroidota: 4\nCampylobacterota: 4")
+
+l <- data.frame(x = rep(-Inf, 2), y = rep(Inf, 2), type = c("Groundwaters", "Cultures"),
+                label = c("a: groundwaters", "b: incubations"))
+
+g %>%
+  tidygraph::activate(nodes) %>%
+  mutate(group = as.factor(tidygraph::group_infomap())) %>%
+  mutate(type = factor(type, levels = c("Groundwaters", "Cultures"))) %>%
+  mutate(phylum = factor(phylum, levels = names(cols.phylum))) %>%
+  ggraph(layout = 'stress') +
+  geom_edge_fan(width = 0.2) + 
+  geom_node_point(aes(fill = phylum), shape = 21, stroke = 0.3, size = 2.4) +
+  geom_text(data = t, aes(x = x, y = y, label = label), size = 6/.pt, hjust = 0) +
+  geom_text(data = l, aes(x = x, y = y, label = label), size = 7/.pt, hjust = -0.1, fontface = "bold", vjust = 1.2) +
+  facet_nodes(~type, scales = "free") +
+  scale_fill_manual(values = cols.phylum) +
+  theme_graph(
+    base_family = "Helvetica", 
+    base_size = 5,
+    plot_margin = margin(l = 1, r = 1)
+    ) +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "bottom",
+    panel.border = element_rect(fill = "transparent", linewidth = 0.75),
+    legend.text = element_text(margin = margin(l = -2), size = 6),
+    strip.text = element_blank()
+    )
+```
+
+```{r, eval=FALSE}
+ggsave("figures/network.pdf", width = 180, height = 120, units = "mm")
+```
+
 
 # 16S data cultures
 
@@ -841,17 +1017,17 @@ p1 <- nmds.scores %>%
          ) +
   geom_vline(xintercept = 0, linetype = 'dotted') +
   geom_hline(yintercept = 0, linetype = 'dotted') +
-  geom_point(size = 4.0, stroke = 0.75) + 
+  geom_point(size = 4.0, stroke = 0.9) + 
   geom_text(data = nmds.scores, 
             aes(label = age), 
-            size = 6/.pt, color = "black", na.rm = TRUE) + 
+            size = 5/.pt, color = "black", na.rm = TRUE) + 
   scale_shape_manual(values = c("ace" = 23, "lys" = 24, "env" = 21), 
                      labels = c("Acetate", "Lysate", "Environmental")) +
   scale_color_manual(values = cols.fraction, labels = c("Environmental", "< 0.45 µm", "Non-fractionated")) +
   scale_fill_manual(values = alpha(cols.fraction, alpha = 0.2), guide = "none") +
-  annotate('text', x = -Inf, y = -Inf, size = 6/.pt, hjust = -0.1, vjust = -0.5, 
+  annotate('text', x = -Inf, y = -Inf, size = 5/.pt, hjust = -0.1, vjust = -0.5, 
            label = paste('Stress = ', round(nmds$stress, digits = 2))) +
-  theme_tidy(legend = "bottom", fontsize = 6) +
+  theme_tidy(legend = "bottom", fontsize = 5) +
   ggforce::geom_circle(aes(x0 = -1.54, y0 = 0.52, r = 0.45),
               data = i,
               inherit.aes = FALSE,
@@ -864,7 +1040,8 @@ p1 <- nmds.scores %>%
     legend.box.margin = margin(),
     legend.margin = margin(),
     legend.text = element_text(margin = margin(l = 2, r = 8, unit = "pt")),
-    legend.key.spacing.x = unit(0, "mm")
+    legend.key.spacing.x = unit(0, "mm"),
+    legend.key.size = unit(3, "mm")
     )
 
 p1
@@ -901,7 +1078,7 @@ cols.phylum <- c(
   "Patescibacteria" = "#C7B19C",
   "Desulfobacterota" = "#A2A475",
   "Bacillota" = "#1B5331",
-  "Nanoarchaeota" = "#046C9A",
+  "Nanobdellota" = "#046C9A",
   "Omnitrophota" = "#00A08A",
   "Other" = "#899DA4"
 )
@@ -935,7 +1112,7 @@ p2 <- seqtab %>%
   labs(x = 'Week', y = 'Relative abundance (%)', fill = '') +
   scale_fill_manual(values = cols.phylum) + 
   guides(fill = guide_legend(reverse = TRUE, nrow = 3)) +
-  theme_tidy(legend = "bottom", fontsize = 6) + 
+  theme_tidy(legend = "bottom", fontsize = 5) + 
   theme(
     aspect.ratio = 1.0,
     strip.background = element_blank(), 
@@ -952,12 +1129,12 @@ p2 <- seqtab %>%
 p1 + p2 + plot_annotation(tag_levels = "a") & theme(
   plot.tag.location = "plot",
   plot.tag.position = c(0.05,0.98),
-  plot.margin = margin(r = 2),
-  legend.box.margin = margin(t = -10)
+  plot.margin = margin(l = .1, r = .1),
+  legend.box.margin = margin(t = -20)
 )
 ```
 
-```{r export area plot}
+```{r export area plot, eval=FALSE}
 ggsave("figures/fig-3.pdf", height = 11, width = 18, units = "cm")
 ```
 
@@ -1119,7 +1296,7 @@ p1 + p2 + p3 + plot_layout(nrow = 1, guides = "collect") + plot_annotation(tag_l
 )
 ```
 
-```{r}
+```{r, eval=FALSE}
 ggsave("figures/fig-s3.pdf", height = 90, width = 180, units = "mm")
 ```
 
@@ -1134,7 +1311,9 @@ qpcr <- read_tsv('data/qpcr.tsv', col_types = cols(.default = col_character(),
   rename(kingdom = Kingdom)
 ```
 
-```{r plot qpcr, fig.width = 12/2.54}
+```{r fig.width = 12/2.54}
+#| label: fig-qpcr
+
 p1 <- qpcr %>%
   group_by(sample, kingdom) %>% 
   summarise(mean = mean(quantity), sd = sd(quantity), .groups = 'drop') %>%
@@ -1205,7 +1384,7 @@ counts <- tibble(
   )
 ```
 
-```{r plot microscopy meteoric}
+```{r}
 #| fig-cap: Cell counts of enrichment cultures according to fluorescence microscopy. Each line represents the cell density of a single culture and the black horizontal line denotes the mean cell count of the groundwater at t0 (n = 2).
 #| label: fig-microscopy
 
@@ -1255,7 +1434,7 @@ p1 + p2 + plot_layout(nrow = 2, heights = c(3,2), guides = "collect") + plot_ann
   )
 ```
 
-```{r export qpcr}
+```{r export qpcr, eval=FALSE}
 ggsave(filename = "figures/fig-2.pdf", width = 14, height = 14, units = "cm")
 ```
 
@@ -1285,7 +1464,7 @@ cols.phylum <- c(
   "Spirochaetota" = "#D8B70A",
   "Campylobacterota" = "#79402E",
   "Acidobacteriota" = "#FAEFD1",
-  "Nanoarchaeota" = "#046C9A",
+  "Nanobdellota" = "#046C9A",
   "Actinomycetota" = "#C6CDF7",
   "Verrucomicrobiota" = "#D69C4E",
   "Other" = "#899DA4"
@@ -1437,7 +1616,7 @@ p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,
 )
 ```
 
-```{r}
+```{r, eval=FALSE}
 ggsave(filename = "figures/fig-s4.pdf", width = 180, height = 180, units = "mm")
 ```
 
@@ -1446,7 +1625,7 @@ ggsave(filename = "figures/fig-s4.pdf", width = 180, height = 180, units = "mm")
 ## Basic stats on the MAGs
 
 ```{r prepare checkm data}
-t <- c("Bacillota","Desulfobacterota","Pseudomonadota","Patescibacteria","Nanoarchaeota","Other")
+t <- c("Bacillota","Desulfobacterota","Pseudomonadota","Patescibacteria","Nanobdellota","Other")
 
 # Prepare data for plot
 i <- quality %>%
@@ -1489,7 +1668,7 @@ p1 <- i %>%
 ```{r plot completeness, fig.width=10/2.53}
 p2 <- i %>%
   mutate(phylum = factor(phylum, levels = c(
-    "Nanoarchaeota", "Patescibacteria", "Other", "Bacillota", "Desulfobacterota", "Pseudomonadota"
+    "Nanobdellota", "Patescibacteria", "Other", "Bacillota", "Desulfobacterota", "Pseudomonadota"
   ))) %>%
   ggplot(aes(
     phylum, 
@@ -1607,7 +1786,7 @@ p1 + p2 + p3 + p4 + plot_layout(guides = "collect", nrow = 2) & plot_annotation(
     )
 ```
 
-```{r export fig on binstats}
+```{r export fig on binstats, eval=FALSE}
 ggsave(filename = "figures/fig-4.pdf", width = 12, height = 12, units = "cm")
 ```
 
@@ -1672,7 +1851,7 @@ t <- tibble(
   xend = c(7.45, 13.45, 20.45, 23.45, 25.45, 26.45, 27.45, 28.45, 29.45),
   y = rep(14.3, 9), 
   yend = rep(14.3, 9),
-  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanoarchaeota",
+  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanobdellota",
              "Chloroflexota","Spirochaetota","Campylobacterota","Iainarchaeota")
   ) %>%
   mutate(phylum = factor(phylum, names(cols.phylum)))
@@ -1682,7 +1861,7 @@ cols.phylum <- c(
   "Pseudomonadota" = "#972D15",
   "Bacillota" = "#1B5331",
   "Patescibacteria" = "#C7B19C",
-  "Nanoarchaeota" = "#046C9A",
+  "Nanobdellota" = "#046C9A",
   "Chloroflexota" = "#D69C4E",
   "Spirochaetota" = "#D8B70A",
   "Campylobacterota" = "#FAEFD1",
@@ -1752,8 +1931,6 @@ p1 <- km %>%
     axis.title.y = element_blank(),
     panel.border = element_blank()
   )
-
-p1
 ```
 
 ## Metabolic weight
@@ -1827,7 +2004,7 @@ t <- tibble(
   xend = c(7.45, 13.45, 20.45, 23.45, 25.45, 26.45, 27.45, 28.45, 29.45),
   y = rep(14.8, 9), 
   yend = rep(14.8, 9),
-  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanoarchaeota",
+  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanobdellota",
              "Chloroflexota","Spirochaetota","Campylobacterota","Iainarchaeota")
   ) %>%
   mutate(phylum = factor(phylum, names(cols.phylum)))
@@ -1877,8 +2054,6 @@ p2 <- mw %>%
     legend.key.height = unit(3, "mm"),
     legend.text = element_text(margin = margin(l = 2))
   )
-
-p2
 ```
 
 
@@ -1905,7 +2080,7 @@ t <- tibble(
   xend = c(7.45, 13.45, 20.45, 23.45, 25.45, 26.45, 27.45, 28.45, 29.45),
   y = rep(4.8, 9), 
   yend = rep(4.8, 9),
-  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanoarchaeota",
+  phylum = c("Desulfobacterota","Pseudomonadota","Bacillota","Patescibacteria","Nanobdellota",
              "Chloroflexota","Spirochaetota","Campylobacterota","Iainarchaeota")
   ) %>%
   mutate(phylum = factor(phylum, names(cols.phylum)))
@@ -1952,8 +2127,6 @@ p3 <- i %>%
     legend.margin = margin(t = -10),
     legend.key.height = unit(3, "mm"), legend.key.width = unit(2, "mm"),
   )
-
-p3
 ```
 ```{r combine phylum and metabolic ouput}
 #| fig-width: 18
@@ -1971,7 +2144,7 @@ p1 / p2 / p3 + plot_annotation(tag_levels = 'a') & theme(
 
 
 
-```{r export plot metabolic weight}
+```{r export plot metabolic weight, eval=FALSE}
 ggsave("figures/fig-5.pdf", width = 180, height = 180, units = "mm")
 ```
 
