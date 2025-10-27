@@ -5,7 +5,6 @@
 .DS_Store
 didactic-spork.Rproj
 figures
-data
 P15009
 P21015
 P26201
@@ -14,6 +13,13 @@ M.Dopson_22_09_qpcr.xlsx
 manuscript.docx
 abstract.docx
 em
+data/ena/
+data/mag/
+data/kmapper/
+data/em/
+data/meteoric_cultures.txt
+data/*.xlsx
+data/temp/
 didactic-spork_cache
 didactic-spork_files
 cultures.bins.tsv
@@ -23,3 +29,4 @@ banana.txt
 bins-temp.tsv
 grateful-refs.bib
 temp.tsv
+submission
