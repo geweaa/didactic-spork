@@ -75,6 +75,73 @@ smd <- read_tsv("data/ampliseq/metadata.tsv", col_types = cols(.default = col_ch
   filter(!sample %in% c("P21015_1082","P21015_1083","P21015_1084","P21015_1087","P21015_1088","P21015_1089"))
 ```
 
+
+```{r}
+#| label: extraction-controls
+
+# P21015_1032 was the extraction control for the t0 sampling
+# P21015_1033 was the extraction control for the incubations
+
+t0 <- c(
+  "P15009_1057","P15009_1059","P15009_1060","P21015_1020","P21015_1021","P21015_1022", # KR0015
+  "P15009_1061","P15009_1065","P15009_1066","P21015_1023","P21015_1024","P21015_1025", # SA1420
+  "P15009_1069","P15009_1062","P15009_1063","P21015_1029","P21015_1030","P21015_1031"  # SA2600
+       )
+
+c <- seqtab %>% filter(sample == 'P21015_1032') %>% pull(seqid) %>% unique()
+# P21015_1032 contains 376 ASVs that will be removed from the t0 samples
+
+i <- seqtab %>% 
+  filter(sample %in% t0 & !seqid %in% c)
+
+seqtab <- seqtab %>%
+  filter(!sample %in% t0) %>%
+  rbind(i)
+
+# A similar operation for the incubations
+c <- seqtab %>% filter(sample == 'P21015_1033') %>% pull(seqid) %>% unique()
+
+x <- smd %>% filter(fraction == 'fractionated' | fraction == 'non-fractionated') %>% pull(sample)
+
+i <- seqtab %>% 
+  filter(sample %in% x & !seqid %in% c)
+
+seqtab <- seqtab %>%
+  filter(!sample %in% x) %>%
+  rbind(i)
+```
+
+
+```{r}
+#| label: media-controls
+
+# P21015_1085 contained 141 ASVs, P21015_1086 183 ASVs. Both are acetate media controls
+c <- seqtab %>% filter(sample %in% c('P21015_1085', 'P21015_1086')) %>% pull(seqid) %>% unique()
+
+x <- smd %>% filter(medium == 'ace' & fraction != 'control') %>% pull(sample)
+
+i <- seqtab %>% 
+  filter(sample %in% x & !seqid %in% c)
+
+seqtab <- seqtab %>%
+  filter(!sample %in% x) %>%
+  rbind(i)
+
+# Similar operation for the lysate media controls
+# P21015_1090 contained 233 ASVs and P21015_1091 contained 220 ASVs
+c <- seqtab %>% filter(sample %in% c('P21015_1090', 'P21015_1091')) %>% pull(seqid) %>% unique()
+x <- smd %>% filter(medium == 'lys' & fraction != 'control') %>% pull(sample)
+
+i <- seqtab %>% 
+  filter(sample %in% x & !seqid %in% c)
+
+seqtab <- seqtab %>%
+  filter(!sample %in% x) %>%
+  rbind(i) %>%
+  group_by(sample) %>% mutate(relab = count / sum(count)) %>% ungroup()
+```
+
+
 This project includes 15 metagenomes from 15 unique cultures. The metagenomes contain 35 de-replicated metagenome-assembled genomes (MAG) that are affiliated with the Bacillota (7), Desulfobacterota (7), Pseudomonadota (6), Bacteroidota (4), Patescibacteria (3), Nanobdellota (2), Acidobacteriota (1), Campylobacterota (1), Chloroflexota (1), Iainarchaeota (1), Spirochaetota (1), and Verrucomicrobiota (1).
 
 
@@ -174,8 +241,15 @@ rare %>%
   ggplot(aes(sample, species, group = site, colour = origin)) + 
   geom_line(linewidth = 0.75) +
   scale_color_manual(values = cols.origin, name = "Groundwater", labels = c("Meteoric", "Marine", "Saline")) +
-  labs(x = "No. of sequenced reads", y = "Rarefied No. of ASVs") +
-  scale_x_continuous(labels = c("0", "50.000", "100.000", "150.000")) +
+  labs(x = "No. of sequenced reads", y = "Rarefied no. of ASVs") +
+  scale_x_continuous(
+    breaks = c(0, 30000, 60000, 90000),
+    labels = c("0", "30.000", "60.000", "90.000")
+    ) +
+  scale_y_continuous(
+    breaks = c(0, 1000, 2000),
+    labels = c("0", "1,000", "2,000")
+  ) +
   theme_tidy() +
   theme(
     panel.border = element_rect(fill = "transparent", linewidth = 0.75, colour = "#000000"),
@@ -275,6 +349,7 @@ summary(rda)
 vegan::RsquareAdj(rda)
 ```
 
+
 ```{r fig.width = 12/2.53}
 #| label: rda-plot
 #| fig-cap: Redundancy analysis (RDA) of the community composition using the hydrochemistry as constraining factors. The sequence counts were standardized using a Hellinger transformation before calculating the Euclidean distances. Showing only non-redunant variables by removing collinear factors. The ellipse (dotted line) depicts a 95 % compatibility interval.
@@ -296,16 +371,16 @@ p2 <- rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
     data = lab, mapping = aes(x = RDA1/10, y = RDA2/10, label = label),
     size = 6/.pt, parse = TRUE, label.size = 0, label.padding = unit(0.1, "lines")
     ) + 
-  scale_size(range = c(1,8), name = "No. of ASVs") +
-  annotate("text", x = -0.07, y =-0.3, label = "Meteoric", colour = cols.gw[1], size = 7/.pt) +
-  annotate("text", x = 0.06, y = 0.28, label = "Marine", colour = cols.gw[2], size = 7/.pt) +
+  scale_size(range = c(1,8), name = "No. of ASVs", breaks = c(1000, 2000)) +
+  annotate("text", x = -0.3, y =-0.16, label = "Meteoric", colour = cols.gw[1], size = 7/.pt) +
+  annotate("text", x = 0.04, y = 0.22, label = "Marine", colour = cols.gw[2], size = 7/.pt) +
   annotate("text", x =  0.2, y = -0.05, label = "Saline", colour = cols.gw[3], size = 7/.pt) +
   stat_ellipse(aes(x = RDA1, y = RDA2, colour = groundwater), 
                geom = "polygon", show.legend = F,
                fill = NA, linetype = "dashed") +
   # Add R-squared
   annotate("text", x = Inf, y = -Inf, 
-           label = "paste(R ^ 2, \" = 0.52\")", 
+           label = "paste(R ^ 2, \" = 0.29\")", 
            size = 6/.pt, vjust = -0.5, hjust = 1.05, parse = TRUE) +
   scale_color_manual(name = "",values = cols.gw, guide = "none") +
   scale_fill_manual(name = "",values = cols.gw, guide = "none") +
@@ -316,8 +391,10 @@ p2 <- rda$CCA$wa %>% data.frame() %>% tibble::rownames_to_column('sample') %>%
     panel.border = element_rect(fill = "transparent", linewidth = 0.75),
     legend.text = element_text(margin = margin(r = 12, unit = "pt")),
     legend.position = "inside",
-    legend.position.inside  = c(0.9,0.85)
+    legend.position.inside  = c(0.15,0.85)
     )
+
+p2
 ```
 
 
@@ -349,7 +426,7 @@ cols.phylum <- c( # Sorted on abundance
   "Other" = "#899DA4",
   "Unidentified" = "#046C9A"
 )
-
+  
 t %>% arrange(desc(mean_relab)) %>% knitr::kable()
 ```
 
@@ -358,7 +435,7 @@ t %>% arrange(desc(mean_relab)) %>% knitr::kable()
 #| label: fig-phyla
 #| out-width: 100%
 
-t <- t %>% pull(phylum)
+t <- names(cols.phylum)
 
 p3 <- seqtab %>%
   filter(sample %in% t0) %>%
@@ -470,7 +547,7 @@ p1 + p2 + p3 + p4 + plot_layout(nrow = 2) + plot_annotation(tag_levels = "a") &
 ```{r, eval=FALSE}
 #| label: export fig-1
 
-ggsave("figures/fig-1.pdf", width = 180, height = 180, units = "mm")
+ggsave("figures/fig-1.pdf", width = 180, height = 160, units = "mm")
 ```
 
 ## Community structure on abundant groups (not tied to a specific rank)
@@ -544,7 +621,7 @@ seqtab %>%
     axis.text.x = element_blank(), 
     axis.ticks.x = element_blank(),
     legend.key.height = unit(3.5, "mm"),
-    legend.margin = margin(t = -20),
+    legend.margin = margin(t = -16),
     legend.text = element_text(margin = margin(l = 2)),
     panel.border = element_rect(fill = "transparent", linewidth = 0.75),
     legend.key.spacing.y = unit(0, "mm")
@@ -600,6 +677,7 @@ p1 <- network.survey %>%
     strip.background = element_rect(fill = "#F0F0F0")
   )
 ```
+
 
 ```{r}
 #| label: lm-cultures
@@ -677,7 +755,7 @@ p1 / p2 + plot_annotation(tag_levels = c("a", "b")) & theme(
 ```{r, eval=FALSE}
 #| label: export-fig-lm
 
-ggsave("figures/fig-s5.pdf", width = 160, height = 160, units = "mm")
+ggsave("figures/fig-s6.pdf", width = 160, height = 160, units = "mm")
 ```
 
 ## Network analysis: order
@@ -720,6 +798,7 @@ fit <- fit %>% slice_max(r.squared, n = 8) %>%
   arrange(desc(r.squared)) %>%
   mutate(n = as.character(n))
 ```
+
 
 ```{r plot correlation order groundwater}
 label <- c(
@@ -795,14 +874,14 @@ fit <- fit %>% slice_max(r.squared, n = 8) %>%
 
 ```{r plot correlation order cultures}
 label = c(
-  "2-01-FULL-45-10 BM507" = "2-01-FULL-45-10\n-\nBM507",
-  "Gygaellales BM507" = "Gygaellales\n-\nBM507",
-  "Gorgyraeales BM507" = "Gorgyraeales\n-\nBM507",
-  "Pluralincolimonadales Portnoybacterales" = "Pluralincolimonadales\n-\nPortnoybacterales",
+  "Gygaellales UBA10092" = "Gygaellales\n-\nMagasanikbacterales",
+  "Dehalococcoidales Magasanikbacterales" = "Dehalococcoidales\n-\nMagasanikbacterales",
+  "Gygaellales Paceibacterales" = "Gygaellales\n-\nPaceibacterales",
+  "Gygaellales UBA9973" = "Gygaellales\n-\nUBA9973",
   "Gygaellales Magasanikbacterales" = "Gygaellales\n-\nMagasanikbacterales",
-  "Pluralincolimonadales BM507" = "Pluralincolimonadales\n-\nBM507",
-  "Gygaellales Portnoybacterales" = "Gygaellales\n-\nPortnoybacterales",
-  "Gygaellales SG8-24" = "Gygaellales\n-\nSG8-24"
+  "Dehalococcoidales Paceibacterales" = "Dehalococcoidales\n-\nPaceibacterales",
+  "Dehalococcoidales Portnoybacterales" = "Dehalococcoidales\n-\nPortnoybacterales",
+  "Treponematales UBA10092" = "Treponematales\n-\nUBA10092"
 )
 
 
@@ -839,7 +918,7 @@ p1 / p2 +
 ```
 
 ```{r export network analysis, eval=FALSE}
-ggsave("figures/fig-s6.pdf", width = 140, height = 160, units = "mm")
+ggsave("figures/fig-s7.pdf", width = 140, height = 160, units = "mm")
 ```
 
 # Negative controls
@@ -1022,14 +1101,14 @@ ggsave(filename = "figures/controls.pdf", width = 180, height = 80, units = "mm"
 cols.phylum <- c( # Sorted on abundance
   "Patescibacteria" = "#C7B19C",
   "Desulfobacterota" = "#A2A475",
-  "Nanobdellota" = "#046C9A",
+  "Bacteroidota" = "#899DA4",
   "Omnitrophota" = "#00A08A",
   "Chloroflexota" = "#D69C4E",
-  "Atribacterota" = "#972D15",
   "Bacillota" = "#FAEFD1",
-  "Nitrospirota" = "#D8B70A",
   "Campylobacterota" = "#1B5331",
-  "Bacteroidota" = "#899DA4"
+  "Atribacterota" = "#972D15",
+  "Nitrospirota" = "#D8B70A",
+  "Nanobdellota" = "#046C9A"
 )
 s <- c(t0, unique(survey.amplicons$sample))
 
@@ -1140,7 +1219,7 @@ g <- tidygraph::as_tbl_graph(g)
 library(ggraph)
 
 t <- data.frame(x = 0, y = 6, type = "Groundwaters",
-                label = "Patescibacteria: 127 nodes\nDesulfobacterota: 38\nNanobdellota: 38\nOmnitrophota: 17\nChloroflexota: 11\nAtribacterota: 6\nBacteroidota: 4\nCampylobacterota: 4")
+                label = "Patescibacteria: 142 nodes\nDesulfobacterota: 48\nBacteroidota: 25\nOmnitrophota: 17\nChloroflexota: 10\nBacillota: 6\nCampylobacterota: 5\nAtribacterota: 2\nNitrospirota: 2")
 
 l <- data.frame(x = rep(-Inf, 2), y = rep(Inf, 2), type = c("Groundwaters", "Cultures"),
                 label = c("a: groundwaters", "b: incubations"))
@@ -1154,13 +1233,13 @@ g %>%
   geom_edge_fan(width = 0.2) + 
   geom_node_point(aes(fill = phylum), shape = 21, stroke = 0.3, size = 2.4) +
   geom_text(data = t, aes(x = x, y = y, label = label), size = 6/.pt, hjust = 0) +
-  geom_text(data = l, aes(x = x, y = y, label = label), size = 7/.pt, hjust = -0.1, fontface = "bold", vjust = 1.2) +
+  geom_text(data = l, aes(x = x, y = y, label = label), size = 7/.pt, hjust = -0.1, fontface = "bold", vjust = 1.3) +
   facet_nodes(~type, scales = "free") +
   scale_fill_manual(values = cols.phylum) +
   theme_graph(
     base_family = "Helvetica", 
     base_size = 5,
-    plot_margin = margin(l = 1, r = 1)
+    plot_margin = margin(l = 1, r = 1, t = 1)
     ) +
   theme(
     legend.title = element_blank(),
@@ -1173,7 +1252,7 @@ g %>%
 
 
 ```{r, eval=FALSE}
-ggsave("figures/network.pdf", width = 180, height = 120, units = "mm")
+ggsave("figures/fig-6.pdf", width = 180, height = 100, units = "mm")
 ```
 
 
@@ -1229,7 +1308,7 @@ p1 <- nmds.scores %>%
   annotate('text', x = -Inf, y = -Inf, size = 5/.pt, hjust = -0.1, vjust = -0.5, 
            label = paste('Stress = ', round(nmds$stress, digits = 2))) +
   theme_tidy(legend = "bottom", fontsize = 5) +
-  ggforce::geom_circle(aes(x0 = -1.54, y0 = 0.52, r = 0.45),
+  ggforce::geom_circle(aes(x0 = -1.6, y0 = 0.15, r = 0.45),
               data = i,
               inherit.aes = FALSE,
               fill = NA, color = "black", linewidth = 0.3, linetype = "dashed") +
@@ -1244,6 +1323,8 @@ p1 <- nmds.scores %>%
     legend.key.spacing.x = unit(0, "mm"),
     legend.key.size = unit(3, "mm")
     )
+
+p1
 ```
 
 ## Barplot KR0015 (Fig 3)
@@ -1395,6 +1476,7 @@ p1 <- nmds.scores %>%
     )
 ```
 
+
 ```{r extract nmds coordinates filtered}
 set.seed(999)
 
@@ -1500,7 +1582,7 @@ p1 + p2 + p3 + plot_layout(nrow = 1, guides = "collect") + plot_annotation(tag_l
 ```
 
 ```{r, eval=FALSE}
-ggsave("figures/fig-s3.pdf", height = 90, width = 180, units = "mm")
+ggsave("figures/fig-s4.pdf", height = 90, width = 180, units = "mm")
 ```
 
 ## QPCR KR0015 (Fig 2)
@@ -1678,7 +1760,7 @@ cols.phylum <- c(
 p1 <- seqtab %>%
   filter(grepl("P26", sample)) %>%
   inner_join(tax, by = "seqid") %>% 
-  mutate(phylum = if_else(phylum %in% t, phylum, "Other")) %>%
+  mutate(phylum = if_else(phylum %in% names(cols.phylum), phylum, "Other")) %>%
   # Summarize in order to have the sum for each category and topphylum
   group_by(sample, phylum) %>% 
   summarise(relab = sum(relab), .groups = 'drop') %>%
@@ -1774,7 +1856,7 @@ t <- seqtab %>%
 p3 <- seqtab %>%
   filter(grepl("P26", sample)) %>%
   inner_join(tax, by = "seqid") %>% 
-  mutate(phylum = if_else(phylum %in% t, phylum, "Other")) %>%
+  mutate(phylum = if_else(phylum %in% names(cols.phylum), phylum, "Other")) %>%
   # Summarize in order to have the sum for each category and topphylum
   group_by(sample, phylum) %>% 
   summarise(relab = sum(relab), .groups = 'drop') %>%
@@ -1805,6 +1887,7 @@ p3 <- seqtab %>%
   )
 ```
 
+
 ```{r, fig.width=18/2.53}
 p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,2,1)) + 
   plot_annotation(tag_levels = "a") & theme(
@@ -1820,16 +1903,8 @@ p1 + p2 + p3 + plot_layout(nrow = 3, ncol = 1, guides = "collect", widths = c(2,
 ```
 
 ```{r, eval=FALSE}
-ggsave(filename = "figures/fig-s4.pdf", width = 180, height = 180, units = "mm")
+ggsave(filename = "figures/fig-s5.pdf", width = 180, height = 180, units = "mm")
 ```
-
-
-```{r}
-for (d in 1:50) {
-  i[d, "n"] <- sample(x, 1)
-}
-```
-
 
 # Genome-resolved metagenomics
 
@@ -2378,10 +2453,4 @@ ggsave("figures/fig-5.pdf", width = 180, height = 180, units = "mm")
 ```
 
 
-
-# Supplementary table metagenomic assemblies
-
-```{r}
-
-```
 
