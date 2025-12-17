@@ -14,7 +14,6 @@ manuscript.docx
 abstract.docx
 em
 data/ena/
-data/mag/
 data/kmapper/
 data/em/
 data/meteoric_cultures.txt
@@ -31,3 +30,10 @@ grateful-refs.bib
 temp.tsv
 submission
 data/ampliseq/ASV_tax.tsv.gz
+data/mag/MW-score_reaction_table.txt
+data/mag/emapper.tsv.gz
+data/mag/gtdbtk.summary.tsv
+data/mag/magmap.overall_stats.tsv.gz
+data/mag/quality_report.tsv
+data/mag/overall_summary.tsv
+data/mag/metabolic.tsv.gz
