@@ -34,7 +34,6 @@ other-links:
 #| echo: false
 #| cache: false
 
-source("../../Protocols/theme.R")
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE, dpi = 40)
 ```
 
@@ -146,9 +145,9 @@ This project includes 15 metagenomes from 15 unique cultures. The metagenomes co
 
 
 ```{r files metag}
-coverm <- read_tsv("data/mag/coverm.tsv.gz", col_types = cols(.default = col_character(), tpm = col_double()))
+coverm <- read_tsv("data/mag/coverm-mapping.tsv", col_types = 'ccd')
 
-emapper <- read_tsv("data/mag/emapper.tsv.gz", show_col_types = FALSE) 
+emapper <- read_tsv("data/mag/emapper.tsv.gz", col_types = 'ccdcccc') 
 
 # Sample 35 (l7f) was removed from the binning process as this sample did not produce any bins
 bintax <- read_tsv("data/mag/gtdbtk.summary.tsv", col_types = cols(.default = col_character())) %>%
@@ -157,7 +156,7 @@ bintax <- read_tsv("data/mag/gtdbtk.summary.tsv", col_types = cols(.default = co
 quality <- read_tsv("data/mag/quality_report.tsv", show_col_types = F) %>%
   rename_with(tolower) %>%
   rename(genome = name) %>%
-  filter(genome %in% coverm$genome)
+  filter(genome %in% coverm$mag)
 ```
 
 
@@ -279,7 +278,7 @@ p1 <- ggplot() +
 As the hydrochemistry data is from a monitoring program, the sampling data closest to groundwater sampling was selected. All units are mg l-1, except for EC (mS m-1), pH, T (degrees C), and O18 (ppt SMOW)
 
 ```{r read hydrochemistry}
-chem <- read_tsv("data/sicada.txt", show_col_types = FALSE) %>% 
+chem <- read_tsv("data/sicada.tsv", show_col_types = FALSE) %>% 
   rename_with(tolower) %>% 
   filter(sampling) %>%
   select(groundwater = idcode, so4, feii, ph_lab, ec_lab, temp_w, doc, nh4_n, o18, s34_so4) %>%
