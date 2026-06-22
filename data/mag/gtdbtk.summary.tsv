@@ -1,0 +1,36 @@
+genome	domain	phylum	class	order	family	genus	species
+MEGAHIT-MaxBin2Refined-VK-3516-KFM02a-3_S40_L002.023	Bacteria	Patescibacteria	ABY1	BM507	GWC2-42-12	JACPHD01	NA
+MEGAHIT-MaxBin2Refined-VK-3516-KFM02a-3_S40_L002.026	Bacteria	Patescibacteria	Paceibacteria	UBA10092	UBA10092	UBA10092	NA
+MEGAHIT-MaxBin2Refined-VK-3516-SA1420-SRM-a_S42_L002.001	Bacteria	Pseudomonadota	Alphaproteobacteria	Rhodospirillales	Casp-alpha2	UBA1479	NA
+MEGAHIT-MaxBin2Refined-VK-3516-SA1420-SRM-a_S42_L002.002	Bacteria	Pseudomonadota	Gammaproteobacteria	JAHJQQ01	JAHJQQ01	JAHJQQ01	NA
+MEGAHIT-MaxBin2Refined-VK-3516-a1f_S39_L002.002	Bacteria	Desulfobacterota	Desulfarculia	Desulfarculales	Desulfarculaceae	SURF-10	NA
+MEGAHIT-MaxBin2Refined-VK-3516-a1f_S39_L002.003	Bacteria	Bacillota	Bacilli	Izemoplasmatales	UBA5603	4572-104	NA
+MEGAHIT-MaxBin2Refined-VK-3516-a1u_S32_L002.006	Bacteria	Bacillota	Bacilli	Acholeplasmatales	Acholeplasmataceae	UBA2284	NA
+MEGAHIT-MaxBin2Refined-VK-3516-a4f_S18_L002.002	Bacteria	Desulfobacterota	Desulfobacteria	Desulfobacterales	Desulfobacteraceae	Desulfobacula	NA
+MEGAHIT-MaxBin2Refined-VK-3516-l2u_S25_L002.002	Bacteria	Bacteroidota	Bacteroidia	Flavobacteriales	Flavobacteriaceae	Lutibacter	NA
+MEGAHIT-MaxBin2Refined-VK-3516-l2u_S25_L002.003	Bacteria	Verrucomicrobiota	Lentisphaeria	Victivallales	GWF2-38-69	GWF2-38-69	NA
+MEGAHIT-MaxBin2Refined-VK-3516-l3u_S16_L002.002	Bacteria	Pseudomonadota	Gammaproteobacteria	Enterobacterales	Enterobacteriaceae	ATCC-39006	ATCC-39006 sp002847015
+MEGAHIT-MaxBin2Refined-VK-3516-l3u_S16_L002.004	Bacteria	Bacteroidota	Bacteroidia	Bacteroidales	UBA6680	UBA6680	NA
+MEGAHIT-MaxBin2Refined-VK-3516-l3u_S16_L002.005	Bacteria	Bacillota	Clostridia	Christensenellales	Aristaeellaceae	Limiplasma	NA
+MEGAHIT-MaxBin2Refined-VK-3516-media-gw-oil-b_S38_L002.006_sub	Bacteria	Bacillota	Clostridia	Eubacteriales	Eubacteriaceae	Acetobacterium	NA
+MEGAHIT-MaxBin2Refined-VK-3516-s2u_S27_L002.001	Bacteria	Campylobacterota	Campylobacteria	Campylobacterales	Sulfurimonadaceae	Sulfurimonas	Sulfurimonas sp002899765
+MEGAHIT-MetaBAT2Refined-VK-3516-KFM02a-2_S19_L002.31_sub	Bacteria	Patescibacteria	Microgenomatia	UBA1400	CG1-02-47-37	JAPLVF01	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-KFM02a-5_S41_L002.16_sub	Bacteria	Chloroflexota	Anaerolineae	Anaerolineales	Villigracilaceae	Villigracilis	Villigracilis sp030680795
+MEGAHIT-MetaBAT2Refined-VK-3516-KFM24-2_S21_L002.63_sub	Bacteria	Spirochaetota	Spirochaetia	Sphaerochaetales	Sphaerochaetaceae	UBA8525	UBA8525 sp002839335
+MEGAHIT-MetaBAT2Refined-VK-3516-SA1420-SRM-a_S42_L002.7_sub	Bacteria	Pseudomonadota	Alphaproteobacteria	Rhizobiales	Xanthobacteraceae	Bradyrhizobium	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-SA1420-SRM-b_S43_L002.4	Bacteria	Desulfobacterota	Desulfobulbia	Desulfobulbales	Desulfocapsaceae	Desulforhopalus	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-a1u_S32_L002.5	Bacteria	Desulfobacterota	Desulfobacteria	Desulfobacterales	Desulfatibacillaceae	JAHJUF01	JAHJUF01 sp018829095
+MEGAHIT-MetaBAT2Refined-VK-3516-l2u_S25_L002.1	Bacteria	Pseudomonadota	Alphaproteobacteria	Rhodospirillales	JACZKS01	JACZKS01	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-l3u_S16_L002.1	Bacteria	Desulfobacterota	Desulfarculia	Desulfarculales	Desulfarculaceae	SURF-10	SURF-10 sp018896025
+MEGAHIT-MetaBAT2Refined-VK-3516-l5u_S29_L002.1	Bacteria	Pseudomonadota	Gammaproteobacteria	Burkholderiales	Burkholderiaceae	Rhodoferax	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-l5u_S29_L002.4	Bacteria	Desulfobacterota	Desulfovibrionia	Desulfovibrionales	Desulfovibrionaceae	CALGYO01	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-l5u_S29_L002.5	Bacteria	Desulfobacterota	Desulfarculia	Desulfarculales	Desulfarculaceae	JACRDC01	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-l5u_S29_L002.6	Bacteria	Bacteroidota	Bacteroidia	Bacteroidales	Marinifilaceae	SNAP01	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-l6f_S34_L002.1	Bacteria	Acidobacteriota	Holophagae	Holophagales	Holophagaceae	Holophaga	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-methanol-a_S14_L002.1	Bacteria	Bacillota	Clostridia	Eubacteriales	Eubacteriaceae	Acetobacterium	Acetobacterium sp003260995
+MEGAHIT-MetaBAT2Refined-VK-3516-s2u_S27_L002.12	Bacteria	Bacteroidota	Ignavibacteria	Ignavibacteriales	Melioribacteraceae	NA	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-s2u_S27_L002.7	Bacteria	Bacillota	Bacilli	Izemoplasmatales	UBA5603	JAHIVB01	JAHIVB01 sp018816905
+MEGAHIT-MetaBAT2Refined-VK-3516-s3f_S33_L002.2_sub	Bacteria	Bacillota	Bacilli	Acholeplasmatales	Acholeplasmataceae	UBA2284_2	NA
+MEGAHIT-MaxBin2Refined-VK-3516-KFM02a-3_S40_L002.019_sub	Archaea	Nanoarchaeota	Nanoarchaeia	Pacearchaeales	GW2011-AR1	NA	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-KFM02a-3_S40_L002.49_sub	Archaea	Nanoarchaeota	Nanoarchaeia	Pacearchaeales	GW2011-AR1_2	NA	NA
+MEGAHIT-MetaBAT2Refined-VK-3516-KFM02a-3_S40_L002.56_sub	Archaea	Iainarchaeota	Iainarchaeia	Iainarchaeales	1-14-0-10-31-34	1-14-0-10-31-34	1-14-0-10-31-34 sp018829335

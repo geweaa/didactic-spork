@@ -157,6 +157,9 @@ quality <- read_tsv("data/mag/quality_report.tsv", show_col_types = F) %>%
   rename_with(tolower) %>%
   rename(genome = name) %>%
   filter(genome %in% coverm$mag)
+
+# Read data from KEGG mapper with 'c' as complete, 'i' as incomplete, and 'm' as module missing
+km <- read_tsv('data/mag/kegg-mapper.tsv.gz', col_types = 'ccc')
 ```
 
 
@@ -2094,35 +2097,6 @@ ggsave(filename = "figures/fig-4.pdf", width = 12, height = 12, units = "cm")
 ```
 
 ## KO mapper
-
-```{r}
-km <- data.frame()
-for (file in list.files("data/kmapper/", full.names = TRUE)) {
-  genome <- substr(file, 15, nchar(file)) %>% gsub(".txt", "", .)
-  i <- read_tsv(file, col_names = FALSE, show_col_types = FALSE)
-  i <- i %>% filter(grepl("M00", X1)) %>%
-    mutate(genome = genome) %>%
-    mutate(module = substr(X1, 1, 6)) %>%
-    mutate(completeness = sub(".*\\s", "", X1)) %>%
-    mutate(completeness = gsub(")", "", completeness)) %>%
-    select(-X1)
-  km <- km %>% rbind(i)
-}
-
-km <- km %>%
-  mutate(genes = gsub("/.*", "", completeness) %>% as.numeric()) %>%
-  mutate(total = gsub(".*/", "", completeness) %>% as.numeric()) %>%
-  mutate(score = case_when(
-    genes == total ~ "c",
-    (total - genes) == 1 ~ "i",
-    .default = "m"
-  )) %>%
-  select(genome, module, score) %>%
-  # Assign a value for every genome-module combination
-  pivot_wider(names_from = "module", values_from = "score", values_fill = "m") %>%
-  pivot_longer(-1, values_to = "score", names_to = "module")
-```
-
 
 ```{r}
 km <- km %>% mutate(label = case_when(
